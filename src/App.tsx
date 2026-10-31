@@ -19,6 +19,7 @@ import {
 import { calculateCapacity, getRankedDrain, getSlotDrain } from './engine/capacity'
 import type { DamageType, ModSlot, RankedWeaponMod } from './engine/types'
 import { calculateWeaponStats } from './engine/weapon'
+import { filterModsForWeapon } from './lib/modCompatibility'
 import { searchItems } from './lib/search'
 import { useCatalogStore, type WeaponFilter } from './store/useCatalogStore'
 import type { CatalogData, ModRecord, WeaponRecord } from './types'
@@ -73,17 +74,6 @@ const damageNames: Record<string, string> = {
   tau: 'Tau',
   true: 'Verdadeiro',
   untyped: 'Não classificado',
-}
-
-function isCompatibleMod(weapon: WeaponRecord, mod: ModRecord): boolean {
-  const targets = [weapon.name, weapon.type, weapon.category]
-    .filter(Boolean)
-    .map((value) => value!.toLocaleLowerCase('en-US'))
-  const compatibility = mod.compatName?.toLocaleLowerCase('en-US')
-  if (compatibility) return targets.includes(compatibility)
-
-  const modType = mod.type?.replace(/\s+Mod$/, '').trim().toLocaleLowerCase('en-US')
-  return modType !== undefined && targets.includes(modType)
 }
 
 function matchesSlotPolarity(slotPolarity: string, modPolarity: string): boolean {
@@ -243,7 +233,7 @@ export default function App() {
   const selectedWeapon = catalog.weapons.find((weapon) => weapon.uniqueName === selectedWeaponId)
   const selectedMod = catalog.mods.find((mod) => mod.uniqueName === selectedModId)
   const compatibleMods = useMemo(
-    () => selectedWeapon ? catalog.mods.filter((mod) => isCompatibleMod(selectedWeapon, mod)) : catalog.mods,
+    () => selectedWeapon ? filterModsForWeapon(catalog.mods, selectedWeapon) : catalog.mods,
     [catalog.mods, selectedWeapon],
   )
   const mods = useMemo(() => searchItems(compatibleMods, modQuery), [compatibleMods, modQuery])
