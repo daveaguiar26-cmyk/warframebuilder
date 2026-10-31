@@ -2,7 +2,7 @@ import { writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import Items from '@wfcd/items'
 
-const outputPath = fileURLToPath(new URL('../src/data/catalog.json', import.meta.url))
+const outputPath = fileURLToPath(new URL('../public/data/catalog.json', import.meta.url))
 const excludedTags = new Set(['Amp', 'Kitgun', 'Zaw'])
 const itemCatalog = new Items({
   category: ['Primary', 'Secondary', 'Melee', 'Mods'],

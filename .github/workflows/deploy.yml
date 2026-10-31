@@ -28,6 +28,8 @@ jobs:
         run: npm install
       - name: Atualizar dados estáticos
         run: npm run update-data
+      - name: Executar testes
+        run: npm test
       - name: Construir aplicação
         run: npm run build
       - name: Preparar GitHub Pages

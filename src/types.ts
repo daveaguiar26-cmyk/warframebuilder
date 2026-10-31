@@ -25,6 +25,7 @@ export interface ModRecord {
   type?: string
   imageName?: string
   description?: string
+  compatName?: string
   baseDrain: number
   polarity: string
   fusionLimit: number

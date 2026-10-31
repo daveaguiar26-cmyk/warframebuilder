@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Activity,
   ArrowUpRight,
@@ -13,12 +13,16 @@ import {
   Swords,
   Zap,
 } from 'lucide-react'
-import catalogJson from './data/catalog.json'
 import { searchItems } from './lib/search'
 import { useCatalogStore, type WeaponFilter } from './store/useCatalogStore'
 import type { CatalogData, ModRecord, WeaponRecord } from './types'
 
-const catalog = catalogJson as CatalogData
+const emptyCatalog: CatalogData = {
+  generatedAt: null,
+  source: '@wfcd/items',
+  weapons: [],
+  mods: [],
+}
 
 const weaponFilters: Array<{ label: string; value: WeaponFilter }> = [
   { label: 'Todas', value: 'All' },
@@ -105,6 +109,8 @@ function EmptyState({ title, detail }: { title: string; detail: string }) {
 }
 
 export default function App() {
+  const [catalog, setCatalog] = useState<CatalogData>(emptyCatalog)
+  const [catalogLoading, setCatalogLoading] = useState(true)
   const {
     weaponFilter,
     weaponQuery,
@@ -118,6 +124,27 @@ export default function App() {
     selectMod,
   } = useCatalogStore()
 
+  useEffect(() => {
+    let cancelled = false
+
+    fetch(`${import.meta.env.BASE_URL}data/catalog.json`)
+      .then((response) => {
+        if (!response.ok) throw new Error('Não foi possível carregar o catálogo local.')
+        return response.json() as Promise<CatalogData>
+      })
+      .then((data) => {
+        if (!cancelled) setCatalog(data)
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) setCatalogLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const weapons = useMemo(() => {
     const matching = searchItems(catalog.weapons, weaponQuery)
     return matching.filter((weapon) => weaponFilter === 'All' || weapon.category === weaponFilter)
@@ -127,7 +154,9 @@ export default function App() {
   const selectedWeapon = catalog.weapons.find((weapon) => weapon.uniqueName === selectedWeaponId)
   const selectedMod = catalog.mods.find((mod) => mod.uniqueName === selectedModId)
   const isEmpty = catalog.weapons.length === 0 && catalog.mods.length === 0
-  const updatedLabel = catalog.generatedAt
+  const updatedLabel = catalogLoading
+    ? 'a carregar'
+    : catalog.generatedAt
     ? new Intl.DateTimeFormat('pt-PT', { dateStyle: 'medium' }).format(new Date(catalog.generatedAt))
     : 'por actualizar'
 
@@ -148,7 +177,7 @@ export default function App() {
         </nav>
 
         <div className="topbar-meta">
-          <span className={`data-indicator ${isEmpty ? 'is-waiting' : ''}`} />
+          <span className={`data-indicator ${catalogLoading || isEmpty ? 'is-waiting' : ''}`} />
           <span className="data-label">DADOS LOCAIS <b>·</b> {updatedLabel}</span>
           <a className="help-link" href="https://github.com/WFCD/warframe-items" target="_blank" rel="noreferrer" title="Origem dos dados do jogo">
             <CircleHelp size={17} />
@@ -210,7 +239,9 @@ export default function App() {
                 active={weapon.uniqueName === selectedWeaponId}
                 onSelect={() => selectWeapon(weapon.uniqueName)}
               />
-            )) : isEmpty ? (
+            )) : catalogLoading ? (
+              <EmptyState title="A carregar catálogo" detail="A ler o catálogo estático do jogo." />
+            ) : isEmpty ? (
               <EmptyState title="Catálogo vazio" detail="Execute npm run update-data para gerar a lista local de armas e mods." />
             ) : (
               <EmptyState title="Sem resultados" detail="Altere a pesquisa ou escolha outra classe de arma." />
@@ -254,9 +285,9 @@ export default function App() {
             <div className="detail-empty">
               <div className="reticle"><Crosshair size={42} strokeWidth={1.2} /></div>
               <span className="eyebrow">SELECCIONAR EQUIPAMENTO</span>
-              <h2>{isEmpty ? 'A preparar o arsenal.' : 'Escolha uma arma.'}</h2>
-              <p>{isEmpty ? 'Depois de actualizar os dados, pesquise e abra qualquer arma para consultar os seus valores base.' : 'Os valores base e os detalhes da arma aparecem aqui.'}</p>
-              <div className="detail-hint"><span>SEM SIMULADOR</span><i />SEM CÁLCULOS NESTA FASE</div>
+              <h2>{catalogLoading ? 'A carregar arsenal.' : isEmpty ? 'A preparar o arsenal.' : 'Escolha uma arma.'}</h2>
+              <p>{catalogLoading ? 'A abrir os dados locais do jogo.' : isEmpty ? 'Depois de actualizar os dados, pesquise e abra qualquer arma para consultar os seus valores base.' : 'Os valores base e os detalhes da arma aparecem aqui.'}</p>
+              <div className="detail-hint"><span>SEM SIMULADOR</span><i />MOTOR AINDA NÃO LIGADO À VISTA</div>
             </div>
           )}
         </section>
@@ -285,7 +316,9 @@ export default function App() {
                 active={mod.uniqueName === selectedModId}
                 onSelect={() => selectMod(mod.uniqueName === selectedModId ? null : mod.uniqueName)}
               />
-            )) : isEmpty ? (
+            )) : catalogLoading ? (
+              <EmptyState title="A carregar catálogo" detail="A ler o catálogo estático do jogo." />
+            ) : isEmpty ? (
               <EmptyState title="Catálogo vazio" detail="Os mods ficam disponíveis depois de gerar os dados locais." />
             ) : (
               <EmptyState title="Sem resultados" detail="Tente pesquisar por nome, categoria ou efeito." />
@@ -305,7 +338,7 @@ export default function App() {
       </section>
 
       <footer className="statusbar">
-        <span><span className={`status-dot ${isEmpty ? 'is-waiting' : ''}`} />CATÁLOGO {isEmpty ? 'POR GERAR' : 'PRONTO'}</span>
+        <span><span className={`status-dot ${catalogLoading || isEmpty ? 'is-waiting' : ''}`} />CATÁLOGO {catalogLoading ? 'A CARREGAR' : isEmpty ? 'POR GERAR' : 'PRONTO'}</span>
         <span><Database size={13} />{catalog.source} <b>·</b> ficheiros estáticos</span>
         <span className="status-right"><a href="https://wiki.warframe.com/w/Mod" target="_blank" rel="noreferrer">Wiki oficial <ArrowUpRight size={12} /></a></span>
       </footer>
