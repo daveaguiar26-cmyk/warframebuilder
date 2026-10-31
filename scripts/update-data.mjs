@@ -40,6 +40,7 @@ const mods = itemCatalog
     uniqueName: item.uniqueName,
     name: item.name,
     type: item.type,
+    compatName: item.compatName,
     imageName: item.imageName,
     description: item.description,
     baseDrain: item.baseDrain,

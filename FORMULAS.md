@@ -24,6 +24,9 @@ sessão. As divergências e aproximações estão assinaladas junto de cada regr
 	escolhido 20%; falta confirmar in-game.
 - Forma necessária: uma por slot cuja polaridade actual difere da polaridade de
 	fábrica. A aplicação apenas conta Formas; não simula o reset de rank.
+- No editor, a lista `polarities` do catálogo é associada por ordem aos primeiros
+	slots. O pacote não fornece índices separados para essa lista; confirmar a
+	ordem no jogo antes de tratar a contagem de Formas como exacta.
 
 ## Estatísticas e dano de armas
 

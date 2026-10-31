@@ -8,11 +8,17 @@ import {
   Database,
   Filter,
   Layers3,
+  Plus,
   Search,
   Shield,
   Swords,
+  Trash2,
+  X,
   Zap,
 } from 'lucide-react'
+import { calculateCapacity, getRankedDrain, getSlotDrain } from './engine/capacity'
+import type { DamageType, ModSlot, RankedWeaponMod } from './engine/types'
+import { calculateWeaponStats } from './engine/weapon'
 import { searchItems } from './lib/search'
 import { useCatalogStore, type WeaponFilter } from './store/useCatalogStore'
 import type { CatalogData, ModRecord, WeaponRecord } from './types'
@@ -35,6 +41,54 @@ const categoryNames: Record<string, string> = {
   Primary: 'Primária',
   Secondary: 'Secundária',
   Melee: 'Corpo a corpo',
+}
+
+const polarityOptions = [
+  ['none', 'Sem polaridade'],
+  ['madurai', 'Madurai'],
+  ['naramon', 'Naramon'],
+  ['vazarin', 'Vazarin'],
+  ['zenurik', 'Zenurik'],
+  ['unairu', 'Unairu'],
+  ['penjaga', 'Penjaga'],
+  ['umbra', 'Umbra'],
+  ['universal', 'Omni'],
+] as const
+
+const damageNames: Record<string, string> = {
+  impact: 'Impacto',
+  puncture: 'Perfuração',
+  slash: 'Corte',
+  heat: 'Fogo',
+  cold: 'Gelo',
+  electricity: 'Electricidade',
+  toxin: 'Toxina',
+  blast: 'Explosivo',
+  corrosive: 'Corrosivo',
+  gas: 'Gás',
+  magnetic: 'Magnético',
+  radiation: 'Radiação',
+  viral: 'Viral',
+  void: 'Vácuo',
+  tau: 'Tau',
+  true: 'Verdadeiro',
+  untyped: 'Não classificado',
+}
+
+function isCompatibleMod(weapon: WeaponRecord, mod: ModRecord): boolean {
+  const targets = [weapon.name, weapon.type, weapon.category]
+    .filter(Boolean)
+    .map((value) => value!.toLocaleLowerCase('en-US'))
+  const compatibility = mod.compatName?.toLocaleLowerCase('en-US')
+  if (compatibility) return targets.includes(compatibility)
+
+  const modType = mod.type?.replace(/\s+Mod$/, '').trim().toLocaleLowerCase('en-US')
+  return modType !== undefined && targets.includes(modType)
+}
+
+function matchesSlotPolarity(slotPolarity: string, modPolarity: string): boolean {
+  if (slotPolarity === 'universal' || slotPolarity === 'any') return modPolarity !== 'umbra'
+  return slotPolarity === modPolarity || modPolarity === 'any'
 }
 
 function imageUrl(imageName?: string): string | undefined {
@@ -75,16 +129,42 @@ function WeaponRow({ weapon, active, onSelect }: { weapon: WeaponRecord; active:
   )
 }
 
-function ModRow({ mod, active, onSelect }: { mod: ModRecord; active: boolean; onSelect: () => void }) {
+function ModRow({
+  mod,
+  active,
+  alreadyEquipped,
+  canEquip,
+  onSelect,
+  onEquip,
+}: {
+  mod: ModRecord
+  active: boolean
+  alreadyEquipped: boolean
+  canEquip: boolean
+  onSelect: () => void
+  onEquip: () => void
+}) {
   return (
-    <button className={`catalog-row mod-row ${active ? 'is-selected' : ''}`} onClick={onSelect} type="button">
-      <ItemImage name={mod.name} imageName={mod.imageName} />
-      <span className="row-copy">
-        <span className="row-title">{mod.name}</span>
-        <span className="row-meta">{mod.type ?? 'Mod'} · {mod.polarity}</span>
-      </span>
-      <span className="drain-tag">{mod.baseDrain}</span>
-    </button>
+    <div className={`catalog-row mod-row ${active ? 'is-selected' : ''}`}>
+      <button className="mod-row-select" onClick={onSelect} type="button" aria-pressed={active}>
+        <ItemImage name={mod.name} imageName={mod.imageName} />
+        <span className="row-copy">
+          <span className="row-title">{mod.name}</span>
+          <span className="row-meta">{mod.type ?? 'Mod'} · {mod.polarity}</span>
+        </span>
+        <span className="drain-tag">{mod.baseDrain}</span>
+      </button>
+      <button
+        className="mod-add-button"
+        onClick={onEquip}
+        type="button"
+        disabled={!canEquip || alreadyEquipped}
+        title={alreadyEquipped ? 'Este mod já está na build' : 'Adicionar à build'}
+        aria-label={`Adicionar ${mod.name} à build`}
+      >
+        {alreadyEquipped ? <span className="installed-mark">✓</span> : <Plus size={15} />}
+      </button>
+    </div>
   )
 }
 
@@ -111,17 +191,27 @@ function EmptyState({ title, detail }: { title: string; detail: string }) {
 export default function App() {
   const [catalog, setCatalog] = useState<CatalogData>(emptyCatalog)
   const [catalogLoading, setCatalogLoading] = useState(true)
+  const [modPickerSlot, setModPickerSlot] = useState<number | null>(null)
   const {
     weaponFilter,
     weaponQuery,
     modQuery,
     selectedWeaponId,
     selectedModId,
+    buildSlots,
+    itemRank,
+    catalyst,
     setWeaponFilter,
     setWeaponQuery,
     setModQuery,
     selectWeapon,
     selectMod,
+    equipModInSlot,
+    removeModFromSlot,
+    setModRank,
+    setSlotPolarity,
+    setItemRank,
+    setCatalyst,
   } = useCatalogStore()
 
   useEffect(() => {
@@ -148,17 +238,47 @@ export default function App() {
   const weapons = useMemo(() => {
     const matching = searchItems(catalog.weapons, weaponQuery)
     return matching.filter((weapon) => weaponFilter === 'All' || weapon.category === weaponFilter)
-  }, [weaponFilter, weaponQuery])
+  }, [catalog.weapons, weaponFilter, weaponQuery])
 
-  const mods = useMemo(() => searchItems(catalog.mods, modQuery), [modQuery])
   const selectedWeapon = catalog.weapons.find((weapon) => weapon.uniqueName === selectedWeaponId)
   const selectedMod = catalog.mods.find((mod) => mod.uniqueName === selectedModId)
+  const compatibleMods = useMemo(
+    () => selectedWeapon ? catalog.mods.filter((mod) => isCompatibleMod(selectedWeapon, mod)) : catalog.mods,
+    [catalog.mods, selectedWeapon],
+  )
+  const mods = useMemo(() => searchItems(compatibleMods, modQuery), [compatibleMods, modQuery])
+  const modsById = useMemo(() => new Map(catalog.mods.map((mod) => [mod.uniqueName, mod])), [catalog.mods])
+  const buildModSlots = useMemo<ModSlot[]>(() => buildSlots.map((slot, index) => ({
+    index,
+    polarity: slot.polarity,
+    factoryPolarity: slot.factoryPolarity,
+    kind: 'normal',
+    mod: slot.modId ? modsById.get(slot.modId) : undefined,
+    rank: slot.rank,
+  })), [buildSlots, modsById])
+  const equippedMods = useMemo<RankedWeaponMod[]>(() => buildModSlots.flatMap((slot) =>
+    slot.mod ? [{ slotIndex: slot.index, mod: slot.mod, rank: slot.rank ?? 0 }] : [],
+  ), [buildModSlots])
+  const weaponStats = useMemo(
+    () => selectedWeapon ? calculateWeaponStats({ weapon: selectedWeapon, mods: equippedMods }) : null,
+    [equippedMods, selectedWeapon],
+  )
+  const capacity = calculateCapacity({ rank: itemRank, catalyst, slots: buildModSlots })
+  const isCapacityExceeded = capacity.remainingCapacity < 0
   const isEmpty = catalog.weapons.length === 0 && catalog.mods.length === 0
   const updatedLabel = catalogLoading
     ? 'a carregar'
     : catalog.generatedAt
     ? new Intl.DateTimeFormat('pt-PT', { dateStyle: 'medium' }).format(new Date(catalog.generatedAt))
     : 'por actualizar'
+
+  function equipMod(mod: ModRecord, slotIndex: number): void {
+    if (!selectedWeapon) return
+    if (equipModInSlot(slotIndex, mod.uniqueName)) {
+      selectMod(mod.uniqueName)
+      setModPickerSlot(null)
+    }
+  }
 
   return (
     <main className="app-shell">
@@ -230,6 +350,90 @@ export default function App() {
             ))}
           </div>
 
+          {selectedWeapon && (
+            <div className="weapon-loadout">
+              <div className="weapon-summary">
+                <ItemImage name={selectedWeapon.name} imageName={selectedWeapon.imageName} />
+                <div>
+                  <span>{categoryNames[selectedWeapon.category] ?? selectedWeapon.category}</span>
+                  <strong>{selectedWeapon.name}</strong>
+                  <small>{selectedWeapon.type ?? 'Arma'} · Ranque {itemRank}</small>
+                </div>
+              </div>
+              <div className="loadout-controls">
+                <label>
+                  <span>RANQUE</span>
+                  <select value={itemRank} onChange={(event) => setItemRank(Number(event.target.value))} aria-label="Ranque da arma">
+                    {Array.from({ length: 31 }, (_, rank) => <option key={rank} value={rank}>{rank}</option>)}
+                  </select>
+                </label>
+                <label className="catalyst-toggle">
+                  <input type="checkbox" checked={catalyst} onChange={(event) => setCatalyst(event.target.checked)} />
+                  <span>Catalyst</span>
+                </label>
+              </div>
+              <div className={`capacity-block ${isCapacityExceeded ? 'is-over-capacity' : ''}`}>
+                <div className="capacity-heading"><span>CAPACIDADE</span><strong>{capacity.usedCapacity} <i>/</i> {capacity.totalCapacity}</strong></div>
+                <div
+                  className="capacity-track"
+                  role="progressbar"
+                  aria-label="Capacidade de mods utilizada"
+                  aria-valuemin={0}
+                  aria-valuemax={capacity.totalCapacity}
+                  aria-valuenow={capacity.usedCapacity}
+                >
+                  <span style={{ width: `${capacity.totalCapacity ? Math.min(100, capacity.usedCapacity / capacity.totalCapacity * 100) : 0}%` }} />
+                </div>
+                <div className="capacity-footer">
+                  <span>Formas <b>{capacity.formaRequired}</b></span>
+                  <span>{capacity.remainingCapacity < 0 ? `${Math.abs(capacity.remainingCapacity)} a mais` : `${capacity.remainingCapacity} livre`}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+
+          {selectedWeapon && (
+            <div className="weapon-loadout">
+              <div className="weapon-summary">
+                <ItemImage name={selectedWeapon.name} imageName={selectedWeapon.imageName} />
+                <div>
+                  <span>{categoryNames[selectedWeapon.category] ?? selectedWeapon.category}</span>
+                  <strong>{selectedWeapon.name}</strong>
+                  <small>{selectedWeapon.type ?? 'Arma'} · Ranque {itemRank}</small>
+                </div>
+              </div>
+              <div className="loadout-controls">
+                <label>
+                  <span>RANQUE</span>
+                  <select value={itemRank} onChange={(event) => setItemRank(Number(event.target.value))} aria-label="Ranque da arma">
+                    {Array.from({ length: 31 }, (_, rank) => <option key={rank} value={rank}>{rank}</option>)}
+                  </select>
+                </label>
+                <label className="catalyst-toggle">
+                  <input type="checkbox" checked={catalyst} onChange={(event) => setCatalyst(event.target.checked)} />
+                  <span>Catalyst instalado</span>
+                </label>
+              </div>
+              <div className={`capacity-block ${isCapacityExceeded ? 'is-over-capacity' : ''}`}>
+                <div className="capacity-heading"><span>CAPACIDADE</span><strong>{capacity.usedCapacity} <i>/</i> {capacity.totalCapacity}</strong></div>
+                <div
+                  className="capacity-track"
+                  role="progressbar"
+                  aria-label="Capacidade de mods utilizada"
+                  aria-valuemin={0}
+                  aria-valuemax={capacity.totalCapacity}
+                  aria-valuenow={capacity.usedCapacity}
+                >
+                  <span style={{ width: `${capacity.totalCapacity ? Math.min(100, capacity.usedCapacity / capacity.totalCapacity * 100) : 0}%` }} />
+                </div>
+                <div className="capacity-footer">
+                  <span>FORMAS NECESSÁRIAS <b>{capacity.formaRequired}</b></span>
+                  <span>{capacity.remainingCapacity < 0 ? `${Math.abs(capacity.remainingCapacity)} A MAIS` : `${capacity.remainingCapacity} LIVRE`}</span>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="list-heading"><span>ARMAS DISPONÍVEIS</span><span>{weapons.length}</span></div>
           <div className="weapon-list">
             {weapons.length ? weapons.slice(0, 200).map((weapon) => (
@@ -237,7 +441,10 @@ export default function App() {
                 key={weapon.uniqueName}
                 weapon={weapon}
                 active={weapon.uniqueName === selectedWeaponId}
-                onSelect={() => selectWeapon(weapon.uniqueName)}
+                onSelect={() => {
+                  selectWeapon(weapon.uniqueName, weapon.polarities)
+                  selectMod(null)
+                }}
               />
             )) : catalogLoading ? (
               <EmptyState title="A carregar catálogo" detail="A ler o catálogo estático do jogo." />
@@ -263,23 +470,95 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="section-rule"><span>ESTATÍSTICAS BASE</span><span>SEM MODS</span></div>
-              <div className="stats-grid">
-                <Stat icon={Zap} label="Dano base" value={formatNumber(selectedWeapon.totalDamage)} />
-                <Stat icon={Crosshair} label="Chance crítica" value={formatPercent(selectedWeapon.criticalChance)} />
-                <Stat icon={Activity} label="Mult. crítico" value={selectedWeapon.criticalMultiplier === undefined ? '—' : `${formatNumber(selectedWeapon.criticalMultiplier)}×`} />
-                <Stat icon={CircleHelp} label="Prob. de estado" value={formatPercent(selectedWeapon.statusChance)} />
-                <Stat icon={Swords} label="Cadência" value={formatNumber(selectedWeapon.fireRate)} />
-                <Stat icon={Layers3} label="Multishot" value={formatNumber(selectedWeapon.multishot)} />
+              <div className="section-rule build-section-heading"><span>MODS DA BUILD</span><span>{equippedMods.length} / 8</span></div>
+              <div className="build-slot-grid" aria-label="Slots de mods da build">
+                {buildModSlots.map((slot, index) => {
+                  const mod = slot.mod
+                  const polarityMatch = mod && slot.polarity !== 'none'
+                    ? matchesSlotPolarity(slot.polarity ?? 'none', mod.polarity)
+                    : null
+                  const slotCost = mod ? getSlotDrain(slot) : 0
+                  const rankedDrain = mod ? getRankedDrain(mod, slot.rank ?? 0) : 0
+
+                  return (
+                    <div className={`build-slot ${mod ? 'has-mod' : 'is-empty'}`} key={index}>
+                      <div className="build-slot-head">
+                        <span>SLOT {String(index + 1).padStart(2, '0')}</span>
+                        {mod && (
+                          <button
+                            className="slot-remove-button"
+                            type="button"
+                            onClick={() => removeModFromSlot(index)}
+                            title={`Remover ${mod.name}`}
+                            aria-label={`Remover ${mod.name} do slot ${index + 1}`}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        )}
+                      </div>
+                      {mod ? (
+                        <>
+                          <ItemImage name={mod.name} imageName={mod.imageName} className="slot-image" />
+                          <strong className="slot-mod-name" title={mod.name}>{mod.name}</strong>
+                          <div className="slot-controls">
+                            <select
+                              value={slot.rank ?? 0}
+                              onChange={(event) => setModRank(index, Number(event.target.value))}
+                              aria-label={`Ranque de ${mod.name} no slot ${index + 1}`}
+                            >
+                              {Array.from({ length: mod.fusionLimit + 1 }, (_, rank) => (
+                                <option key={rank} value={rank}>R{rank}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={slot.polarity ?? 'none'}
+                              onChange={(event) => setSlotPolarity(index, event.target.value)}
+                              aria-label={`Polaridade do slot ${index + 1}`}
+                            >
+                              {polarityOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                            </select>
+                          </div>
+                          <span className={`slot-drain ${polarityMatch === null ? '' : polarityMatch ? 'is-matching' : 'is-mismatched'}`}>
+                            {slotCost} <small>/ {rankedDrain}</small>
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            className="empty-slot-add"
+                            type="button"
+                            disabled={!selectedWeapon}
+                            onClick={() => setModPickerSlot(index)}
+                            aria-label={`Adicionar mod ao slot ${index + 1}`}
+                          >
+                            <Plus size={16} />
+                            <span>Adicionar mod</span>
+                          </button>
+                          <select
+                            value={slot.polarity ?? 'none'}
+                            onChange={(event) => setSlotPolarity(index, event.target.value)}
+                            aria-label={`Polaridade do slot ${index + 1}`}
+                          >
+                            {polarityOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                          </select>
+                        </>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
 
-              <div className="section-rule lower-rule"><span>DETALHES</span><span>FONTE: DADOS DO JOGO</span></div>
-              <div className="detail-facts">
-                <span>Carregador <b>{formatNumber(selectedWeapon.magazineSize, 0)}</b></span>
-                <span>Recarga <b>{selectedWeapon.reloadTime === undefined ? '—' : `${formatNumber(selectedWeapon.reloadTime)} s`}</b></span>
-                <span>Polaridades de fábrica <b>{selectedWeapon.polarities?.length ? selectedWeapon.polarities.join(' · ') : 'Nenhuma'}</b></span>
+              <div className="section-rule"><span>ESTATÍSTICAS DA BUILD</span><span>{equippedMods.length ? 'COM MODS' : 'BASE'}</span></div>
+              <div className="section-rule lower-rule"><span>DANO POR TIPO</span><span>SEM INIMIGO</span></div>
+              <div className="damage-breakdown">
+                {Object.entries(weaponStats?.damage ?? {}).filter(([, value]) => (value ?? 0) > 0).map(([type, value]) => (
+                  <span key={type}>{damageNames[type as DamageType] ?? type} <b>{formatNumber(value)}</b></span>
+                ))}
               </div>
-              <p className="raw-data-note">Valores base publicados no catálogo. Nenhum cálculo de dano é aplicado nesta fase.</p>
+
+              {weaponStats?.ignoredEffects.length ? (
+                <p className="raw-data-note">Alguns efeitos condicionais não entram no cálculo: {weaponStats.ignoredEffects.join(' · ')}</p>
+              ) : null}
             </>
           ) : (
             <div className="detail-empty">
@@ -292,50 +571,73 @@ export default function App() {
           )}
         </section>
 
-        <aside className="panel mods-panel">
+        <aside className="panel stats-panel">
           <div className="panel-heading">
-            <div className="panel-title-wrap"><span className="panel-index mod-index">B</span><h2>Mods</h2></div>
-            <span className="panel-count">{mods.length.toLocaleString('pt-PT')}</span>
+            <div className="panel-title-wrap"><span className="panel-index mod-index">B</span><h2>Estatísticas</h2></div>
           </div>
-          <label className="search-box">
-            <Search size={16} aria-hidden="true" />
-            <input
-              value={modQuery}
-              onChange={(event) => setModQuery(event.target.value)}
-              placeholder="Pesquisar mods..."
-              aria-label="Pesquisar mods"
-            />
-            <kbd>/</kbd>
-          </label>
-          <div className="list-heading"><span>MODS DISPONÍVEIS</span><span>{mods.length}</span></div>
-          <div className="mod-list">
-            {mods.length ? mods.slice(0, 200).map((mod) => (
-              <ModRow
-                key={mod.uniqueName}
-                mod={mod}
-                active={mod.uniqueName === selectedModId}
-                onSelect={() => selectMod(mod.uniqueName === selectedModId ? null : mod.uniqueName)}
-              />
-            )) : catalogLoading ? (
-              <EmptyState title="A carregar catálogo" detail="A ler o catálogo estático do jogo." />
-            ) : isEmpty ? (
-              <EmptyState title="Catálogo vazio" detail="Os mods ficam disponíveis depois de gerar os dados locais." />
-            ) : (
-              <EmptyState title="Sem resultados" detail="Tente pesquisar por nome, categoria ou efeito." />
-            )}
-          </div>
-          {mods.length > 200 && <p className="list-limit">A mostrar 200 de {mods.length} resultados. Refine a pesquisa.</p>}
-          {selectedMod && (
-            <div className="mod-inspector">
-              <div className="inspector-heading"><span>MOD SELECCIONADO</span><button type="button" onClick={() => selectMod(null)} aria-label="Fechar detalhes do mod">×</button></div>
-              <strong>{selectedMod.name}</strong>
-              <p>{selectedMod.description || selectedMod.type || 'Sem descrição nos dados locais.'}</p>
-              {selectedMod.levelStats?.at(-1)?.stats?.length ? <small>{selectedMod.levelStats.at(-1)?.stats?.join(' · ')}</small> : null}
-              <div className="mod-meta-line"><span>Polaridade <b>{selectedMod.polarity}</b></span><span>Ranque máx. <b>{selectedMod.fusionLimit}</b></span></div>
-            </div>
+          {selectedWeapon && weaponStats ? (
+            <>
+              <div className="reference-dps">
+                <span>DPS DE REFERÊNCIA · SEM RECARGA</span>
+                <strong>{formatNumber(weaponStats.referenceDps, 0)}</strong>
+                <small>{formatNumber(weaponStats.totalDamage)} × {formatNumber(weaponStats.averageCriticalMultiplier)} × {formatNumber(weaponStats.multishot)} × {formatNumber(weaponStats.fireRate)}</small>
+              </div>
+              <div className="side-stats-grid">
+                <Stat icon={Zap} label="Dano total / projéctil" value={formatNumber(weaponStats.totalDamage)} />
+                <Stat icon={Crosshair} label="Chance crítica" value={formatPercent(weaponStats.criticalChance)} />
+                <Stat icon={Activity} label="Multiplicador crítico" value={`${formatNumber(weaponStats.criticalMultiplier)}×`} />
+                <Stat icon={Activity} label="Crítico médio" value={`${formatNumber(weaponStats.averageCriticalMultiplier)}×`} />
+                <Stat icon={CircleHelp} label="Chance de estado" value={formatPercent(weaponStats.statusChance)} />
+                <Stat icon={Layers3} label="Multishot" value={`${formatNumber(weaponStats.multishot)}×`} />
+                <Stat icon={Swords} label="Cadência" value={`${formatNumber(weaponStats.fireRate)} /s`} />
+              </div>
+            </>
+          ) : (
+            <EmptyState title="Escolha uma arma" detail="As estatísticas calculadas aparecem aqui." />
           )}
         </aside>
       </section>
+
+      {modPickerSlot !== null && selectedWeapon && (
+        <div className="picker-backdrop" onClick={(event) => event.target === event.currentTarget && setModPickerSlot(null)}>
+          <section className="mod-picker" role="dialog" aria-modal="true" aria-labelledby="mod-picker-title">
+            <header className="picker-header">
+              <div><span className="eyebrow">BUILD · SLOT {String(modPickerSlot + 1).padStart(2, '0')}</span><h2 id="mod-picker-title">Adicionar mod</h2></div>
+              <button type="button" className="picker-close" onClick={() => setModPickerSlot(null)} aria-label="Fechar selector de mods"><X size={18} /></button>
+            </header>
+            <label className="search-box picker-search">
+              <Search size={16} aria-hidden="true" />
+              <input value={modQuery} onChange={(event) => setModQuery(event.target.value)} placeholder="Pesquisar mods compatíveis..." aria-label="Pesquisar mods compatíveis" autoFocus />
+              <kbd>/</kbd>
+            </label>
+            <div className="list-heading"><span>{selectedWeapon.name.toLocaleUpperCase('pt-PT')} · MODS COMPATÍVEIS</span><span>{mods.length}</span></div>
+            <div className="mod-picker-list">
+              {mods.length ? mods.slice(0, 200).map((mod) => (
+                <ModRow
+                  key={mod.uniqueName}
+                  mod={mod}
+                  active={mod.uniqueName === selectedModId}
+                  alreadyEquipped={buildSlots.some((slot) => slot.modId === mod.uniqueName)}
+                  canEquip
+                  onSelect={() => selectMod(mod.uniqueName)}
+                  onEquip={() => equipMod(mod, modPickerSlot)}
+                />
+              )) : (
+                <EmptyState title="Sem resultados" detail="Tente outro nome ou efeito de mod." />
+              )}
+            </div>
+            {mods.length > 200 && <p className="list-limit">A mostrar 200 de {mods.length} resultados. Refine a pesquisa.</p>}
+            {selectedMod && (
+              <div className="picker-selected">
+                <div><strong>{selectedMod.name}</strong><span>{selectedMod.type ?? 'Mod'} · {selectedMod.polarity}</span></div>
+                <button type="button" disabled={buildSlots.some((slot) => slot.modId === selectedMod.uniqueName)} onClick={() => equipMod(selectedMod, modPickerSlot)}>
+                  <Plus size={14} /> Instalar
+                </button>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
 
       <footer className="statusbar">
         <span><span className={`status-dot ${catalogLoading || isEmpty ? 'is-waiting' : ''}`} />CATÁLOGO {catalogLoading ? 'A CARREGAR' : isEmpty ? 'POR GERAR' : 'PRONTO'}</span>
