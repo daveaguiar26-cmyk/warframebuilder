@@ -55,4 +55,20 @@ describe('build editor store', () => {
 
     expect(useCatalogStore.getState().buildSlots[0].modId).toBeNull()
   })
+
+  it('restores a complete build in one state update', () => {
+    const store = useCatalogStore.getState()
+    store.restoreBuild('/test/weapon', 24, true, [
+      { modId: '/test/mod', rank: 8, polarity: 'madurai', factoryPolarity: 'naramon' },
+      ...Array.from({ length: 7 }, () => ({ modId: null, rank: 0, polarity: 'none', factoryPolarity: 'none' })),
+    ])
+
+    expect(useCatalogStore.getState()).toMatchObject({
+      selectedWeaponId: '/test/weapon',
+      selectedModId: null,
+      itemRank: 24,
+      catalyst: true,
+    })
+    expect(useCatalogStore.getState().buildSlots[0]).toMatchObject({ modId: '/test/mod', rank: 8 })
+  })
 })

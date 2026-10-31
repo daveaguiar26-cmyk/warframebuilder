@@ -36,6 +36,7 @@ interface CatalogState {
   addModToBuild: (modId: string) => boolean
   equipModInSlot: (slotIndex: number, modId: string) => boolean
   removeModFromSlot: (slotIndex: number) => void
+  restoreBuild: (weaponId: string, itemRank: number, catalyst: boolean, slots: BuildModSlot[]) => void
   setModRank: (slotIndex: number, rank: number) => void
   setSlotPolarity: (slotIndex: number, polarity: string) => void
   setItemRank: (rank: number) => void
@@ -100,6 +101,13 @@ export const useCatalogStore = create<CatalogState>((set) => ({
       index === slotIndex ? { ...slot, modId: null, rank: 0 } : slot,
     ),
   })),
+  restoreBuild: (selectedWeaponId, itemRank, catalyst, buildSlots) => set({
+    selectedWeaponId,
+    selectedModId: null,
+    itemRank: Math.max(0, Math.min(30, itemRank)),
+    catalyst,
+    buildSlots,
+  }),
   setModRank: (slotIndex, rank) => set((state) => ({
     buildSlots: state.buildSlots.map((slot, index) =>
       index === slotIndex ? { ...slot, rank } : slot,
