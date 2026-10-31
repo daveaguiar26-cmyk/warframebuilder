@@ -97,3 +97,17 @@ export async function loadLibrary(baseUrl: string): Promise<{ entries: LibraryEn
   if (!response.ok) throw new Error('Não foi possível ler builds.json.')
   return { entries: parseLibraryJson(await response.json()), source: 'builds.json' }
 }
+
+// Apps Script publicado como aplicação Web ("Qualquer pessoa"); acrescenta uma linha à folha.
+const librarySaveUrl = 'https://script.google.com/macros/s/AKfycbxwL1fR21LwfgCluNQzh4mIEzvC_0LYVx3VA3dC7F3zIcBAJ87W6AZ-YYEU-jdNWJGIDQ/exec'
+
+export async function saveBuildToSheet(nome: string, codigo: string): Promise<void> {
+  // text/plain evita o pedido de preflight CORS, que o Apps Script não suporta.
+  const response = await fetch(librarySaveUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ nome, codigo }),
+  })
+  const result = await response.json().catch(() => null) as { ok?: boolean; erro?: string } | null
+  if (!response.ok || !result?.ok) throw new Error(result?.erro ?? 'A folha não aceitou a build.')
+}

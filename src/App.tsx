@@ -24,8 +24,7 @@ import { calculateCapacity, getRankedDrain, getSlotDrain } from './engine/capaci
 import type { DamageType, ModSlot, RankedWeaponMod } from './engine/types'
 import { calculateWeaponStats } from './engine/weapon'
 import { decodeBuildCode, encodeBuildCode, type BuildCodeV1 } from './lib/buildCode'
-import { loadLibrary, type LibraryEntry } from './lib/library'
-import { loadSavedBuilds, storeSavedBuilds, upsertSavedBuild, type SavedBuild } from './lib/savedBuilds'
+import { loadLibrary, saveBuildToSheet, type LibraryEntry } from './lib/library'
 import { filterModsForWeapon } from './lib/modCompatibility'
 import { searchItems } from './lib/search'
 import { useCatalogStore, type WeaponFilter } from './store/useCatalogStore'
@@ -210,8 +209,8 @@ export default function App() {
   const [libraryError, setLibraryError] = useState('')
   const [libraryQuery, setLibraryQuery] = useState('')
   const [libraryFeedback, setLibraryFeedback] = useState('')
-  const [savedBuilds, setSavedBuilds] = useState<SavedBuild[]>(() => loadSavedBuilds())
   const [saveName, setSaveName] = useState('')
+  const [saving, setSaving] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [importCode, setImportCode] = useState('')
   const [importError, setImportError] = useState('')
@@ -292,7 +291,6 @@ export default function App() {
   }
   const libraryEntries = (library?.entries ?? []).map(describeEntry)
   const visibleLibraryEntries = libraryEntries.filter(matchesLibraryQuery)
-  const visibleSavedBuilds = savedBuilds.map(describeEntry).filter(matchesLibraryQuery)
 
   const weapons = useMemo(() => {
     const matching = searchItems(catalog.weapons, weaponQuery)
@@ -408,28 +406,26 @@ export default function App() {
     }
   }
 
-  function updateSavedBuilds(builds: SavedBuild[]): boolean {
-    setSavedBuilds(builds)
-    return storeSavedBuilds(builds)
-  }
-
-  function saveCurrentBuild(): void {
+  async function saveCurrentBuild(): Promise<void> {
     const nome = saveName.trim()
-    if (!buildCode || !nome) return
-    const stored = updateSavedBuilds(upsertSavedBuild(savedBuilds, { nome, autor: '', descricao: '', codigo: buildCode, guardadaEm: new Date().toISOString() }))
-    setCodeFeedback(stored ? `Guardada na biblioteca como "${nome}"` : 'Guardada só nesta sessão: o browser bloqueou o armazenamento')
-    setSaveName('')
+    if (!buildCode || !nome || saving) return
+    setSaving(true)
+    setCodeFeedback('A guardar na biblioteca...')
+    try {
+      await saveBuildToSheet(nome, buildCode)
+      setCodeFeedback(`"${nome}" guardada na biblioteca partilhada`)
+      setSaveName('')
+      setLibrary(null)
+    } catch (error) {
+      setCodeFeedback(`Não foi possível guardar: ${error instanceof Error ? error.message : 'erro desconhecido'}. Tente novamente.`)
+    } finally {
+      setSaving(false)
+    }
   }
 
-  function deleteSavedBuild(entry: LibraryEntry): void {
-    if (!window.confirm(`Apagar a build "${entry.nome}"?`)) return
-    updateSavedBuilds(savedBuilds.filter((item) => item !== entry))
-    setLibraryFeedback(`Build "${entry.nome}" apagada`)
-  }
-
-  function renderLibraryCard({ entry, valid, weapon }: ReturnType<typeof describeEntry>, local: boolean) {
+  function renderLibraryCard({ entry, valid, weapon }: ReturnType<typeof describeEntry>) {
     return (
-      <article key={`${local ? 'local' : 'shared'}-${entry.codigo}`} className={`library-card ${valid ? '' : 'is-invalid'}`}>
+      <article key={entry.codigo} className={`library-card ${valid ? '' : 'is-invalid'}`}>
         <div className="library-card-head">
           {weapon ? <ItemImage name={weapon.name} imageName={weapon.imageName} /> : <span className="item-image"><BookOpen size={16} /></span>}
           <div>
@@ -439,7 +435,6 @@ export default function App() {
         </div>
         {entry.descricao && <p>{entry.descricao}</p>}
         <div className="library-card-actions">
-          {local && <button type="button" className="command-button library-delete" onClick={() => deleteSavedBuild(entry)} aria-label={`Apagar ${entry.nome}`}><Trash2 size={14} /></button>}
           <button type="button" className="command-button" onClick={() => copyLibraryCode(entry)}><Copy size={14} />Copiar código</button>
           <button type="button" className="install-code-button" disabled={!valid || catalogLoading} onClick={() => openLibraryBuild(entry)}><FileInput size={14} />Abrir no editor</button>
         </div>
@@ -699,8 +694,8 @@ export default function App() {
                 <div className="section-rule"><span>GUARDAR BUILD</span><span>BIBLIOTECA</span></div>
                 <form className="build-code-controls" onSubmit={(event) => { event.preventDefault(); saveCurrentBuild() }}>
                   <input aria-label="Nome da build" value={saveName} onChange={(event) => setSaveName(event.target.value)} placeholder="Nome da build, ex.: Braton crítico" maxLength={60} />
-                  <button type="submit" disabled={!buildCode || !saveName.trim()}>
-                    <Save size={14} />Guardar na biblioteca
+                  <button type="submit" disabled={!buildCode || !saveName.trim() || saving}>
+                    <Save size={14} />{saving ? 'A guardar...' : 'Guardar na biblioteca'}
                   </button>
                 </form>
                 {codeFeedback && <small className="code-feedback" role="status">{codeFeedback}</small>}
@@ -754,9 +749,9 @@ export default function App() {
             <div>
               <div className="eyebrow"><span>04</span> / BIBLIOTECA</div>
               <h1>Builds partilhadas</h1>
-              <p>As suas builds ficam guardadas neste browser. Para partilhar, copie o código.</p>
+              <p>Builds guardadas na folha partilhada do grupo. Abra uma no editor ou copie o código.</p>
             </div>
-            <div className="catalog-counts"><span><b>{savedBuilds.length + libraryEntries.length}</b> builds</span></div>
+            <div className="catalog-counts"><span><b>{libraryEntries.length}</b> builds</span></div>
           </section>
 
           <section className="library-panel" aria-label="Biblioteca de builds">
@@ -766,15 +761,6 @@ export default function App() {
             </label>
             {libraryFeedback && <small className="code-feedback" role="status">{libraryFeedback}</small>}
 
-            <div className="section-rule"><span>AS MINHAS BUILDS</span><span>GUARDADAS NESTE BROWSER · {savedBuilds.length}</span></div>
-            {visibleSavedBuilds.length ? (
-              <div className="library-grid">
-                {visibleSavedBuilds.map((item) => renderLibraryCard(item, true))}
-              </div>
-            ) : (
-              <EmptyState title={savedBuilds.length ? 'Sem resultados' : 'Ainda sem builds guardadas'} detail={savedBuilds.length ? 'Tente outro nome ou arma.' : 'No editor de armas, dê um nome à build e carregue em "Guardar na biblioteca".'} />
-            )}
-
             <div className="section-rule"><span>PARTILHADAS</span><span>{(library?.source ?? 'builds.json').toLocaleUpperCase('pt-PT')} · {libraryEntries.length}</span></div>
             {libraryError ? (
               <EmptyState title="Biblioteca indisponível" detail={libraryError} />
@@ -782,7 +768,7 @@ export default function App() {
               <EmptyState title="A carregar biblioteca" detail="A ler a lista de builds partilhadas." />
             ) : visibleLibraryEntries.length ? (
               <div className="library-grid">
-                {visibleLibraryEntries.map((item) => renderLibraryCard(item, false))}
+                {visibleLibraryEntries.map((item) => renderLibraryCard(item))}
               </div>
             ) : (
               <EmptyState title={libraryEntries.length ? 'Sem resultados' : 'Biblioteca vazia'} detail={libraryEntries.length ? 'Tente outro nome, autor ou arma.' : 'Ainda não há builds partilhadas no site.'} />
