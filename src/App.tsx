@@ -352,14 +352,6 @@ export default function App() {
 
           {selectedWeapon && (
             <div className="weapon-loadout">
-              <div className="weapon-summary">
-                <ItemImage name={selectedWeapon.name} imageName={selectedWeapon.imageName} />
-                <div>
-                  <span>{categoryNames[selectedWeapon.category] ?? selectedWeapon.category}</span>
-                  <strong>{selectedWeapon.name}</strong>
-                  <small>{selectedWeapon.type ?? 'Arma'} · Ranque {itemRank}</small>
-                </div>
-              </div>
               <div className="loadout-controls">
                 <label>
                   <span>RANQUE</span>
@@ -393,47 +385,6 @@ export default function App() {
           )}
 
 
-          {selectedWeapon && (
-            <div className="weapon-loadout">
-              <div className="weapon-summary">
-                <ItemImage name={selectedWeapon.name} imageName={selectedWeapon.imageName} />
-                <div>
-                  <span>{categoryNames[selectedWeapon.category] ?? selectedWeapon.category}</span>
-                  <strong>{selectedWeapon.name}</strong>
-                  <small>{selectedWeapon.type ?? 'Arma'} · Ranque {itemRank}</small>
-                </div>
-              </div>
-              <div className="loadout-controls">
-                <label>
-                  <span>RANQUE</span>
-                  <select value={itemRank} onChange={(event) => setItemRank(Number(event.target.value))} aria-label="Ranque da arma">
-                    {Array.from({ length: 31 }, (_, rank) => <option key={rank} value={rank}>{rank}</option>)}
-                  </select>
-                </label>
-                <label className="catalyst-toggle">
-                  <input type="checkbox" checked={catalyst} onChange={(event) => setCatalyst(event.target.checked)} />
-                  <span>Catalyst instalado</span>
-                </label>
-              </div>
-              <div className={`capacity-block ${isCapacityExceeded ? 'is-over-capacity' : ''}`}>
-                <div className="capacity-heading"><span>CAPACIDADE</span><strong>{capacity.usedCapacity} <i>/</i> {capacity.totalCapacity}</strong></div>
-                <div
-                  className="capacity-track"
-                  role="progressbar"
-                  aria-label="Capacidade de mods utilizada"
-                  aria-valuemin={0}
-                  aria-valuemax={capacity.totalCapacity}
-                  aria-valuenow={capacity.usedCapacity}
-                >
-                  <span style={{ width: `${capacity.totalCapacity ? Math.min(100, capacity.usedCapacity / capacity.totalCapacity * 100) : 0}%` }} />
-                </div>
-                <div className="capacity-footer">
-                  <span>FORMAS NECESSÁRIAS <b>{capacity.formaRequired}</b></span>
-                  <span>{capacity.remainingCapacity < 0 ? `${Math.abs(capacity.remainingCapacity)} A MAIS` : `${capacity.remainingCapacity} LIVRE`}</span>
-                </div>
-              </div>
-            </div>
-          )}
           <div className="list-heading"><span>ARMAS DISPONÍVEIS</span><span>{weapons.length}</span></div>
           <div className="weapon-list">
             {weapons.length ? weapons.slice(0, 200).map((weapon) => (
