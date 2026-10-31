@@ -11,6 +11,8 @@ import {
   Filter,
   Layers3,
   Plus,
+  BookOpen,
+  Save,
   Search,
   Shield,
   Swords,
@@ -21,7 +23,9 @@ import {
 import { calculateCapacity, getRankedDrain, getSlotDrain } from './engine/capacity'
 import type { DamageType, ModSlot, RankedWeaponMod } from './engine/types'
 import { calculateWeaponStats } from './engine/weapon'
-import { decodeBuildCode, encodeBuildCode } from './lib/buildCode'
+import { decodeBuildCode, encodeBuildCode, type BuildCodeV1 } from './lib/buildCode'
+import { loadLibrary, type LibraryEntry } from './lib/library'
+import { loadSavedBuilds, storeSavedBuilds, upsertSavedBuild, type SavedBuild } from './lib/savedBuilds'
 import { filterModsForWeapon } from './lib/modCompatibility'
 import { searchItems } from './lib/search'
 import { useCatalogStore, type WeaponFilter } from './store/useCatalogStore'
@@ -201,6 +205,13 @@ export default function App() {
   const [catalog, setCatalog] = useState<CatalogData>(emptyCatalog)
   const [catalogLoading, setCatalogLoading] = useState(true)
   const [modPickerSlot, setModPickerSlot] = useState<number | null>(null)
+  const [view, setView] = useState<'armas' | 'biblioteca'>('armas')
+  const [library, setLibrary] = useState<{ entries: LibraryEntry[]; source: string } | null>(null)
+  const [libraryError, setLibraryError] = useState('')
+  const [libraryQuery, setLibraryQuery] = useState('')
+  const [libraryFeedback, setLibraryFeedback] = useState('')
+  const [savedBuilds, setSavedBuilds] = useState<SavedBuild[]>(() => loadSavedBuilds())
+  const [saveName, setSaveName] = useState('')
   const [importOpen, setImportOpen] = useState(false)
   const [importCode, setImportCode] = useState('')
   const [importError, setImportError] = useState('')
@@ -248,6 +259,40 @@ export default function App() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (view !== 'biblioteca' || library) return
+    let cancelled = false
+    setLibraryError('')
+    loadLibrary(import.meta.env.BASE_URL)
+      .then((data) => { if (!cancelled) setLibrary(data) })
+      .catch((error: unknown) => {
+        if (!cancelled) setLibraryError(error instanceof Error ? error.message : 'Não foi possível carregar a biblioteca.')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [library, view])
+
+  const describeEntry = (entry: LibraryEntry) => {
+    let decoded: BuildCodeV1 | null = null
+    try {
+      decoded = decodeBuildCode(entry.codigo)
+    } catch {
+      decoded = null
+    }
+    const weaponId = decoded?.itens.find((item) => item.tipo === 'arma')?.id
+    const weapon = weaponId ? catalog.weapons.find((item) => item.uniqueName === weaponId) : undefined
+    return { entry, valid: decoded !== null, weapon }
+  }
+  const matchesLibraryQuery = ({ entry, weapon }: ReturnType<typeof describeEntry>) => {
+    const query = libraryQuery.trim().toLocaleLowerCase('pt-PT')
+    return !query || [entry.nome, entry.autor, entry.descricao, weapon?.name ?? '']
+      .some((text) => text.toLocaleLowerCase('pt-PT').includes(query))
+  }
+  const libraryEntries = (library?.entries ?? []).map(describeEntry)
+  const visibleLibraryEntries = libraryEntries.filter(matchesLibraryQuery)
+  const visibleSavedBuilds = savedBuilds.map(describeEntry).filter(matchesLibraryQuery)
 
   const weapons = useMemo(() => {
     const matching = searchItems(catalog.weapons, weaponQuery)
@@ -307,54 +352,107 @@ export default function App() {
     }
   }
 
-  async function copyBuildCode(): Promise<void> {
-    if (!buildCode) return
-    try {
-      await navigator.clipboard.writeText(buildCode)
-      setCodeFeedback('Código copiado')
-    } catch {
-      setCodeFeedback('Não foi possível copiar neste browser')
-    }
+  function applyBuildCode(code: string): void {
+    const decoded = decodeBuildCode(code)
+    const weaponItem = decoded.itens.find((item) => item.tipo === 'arma')
+    if (!weaponItem) throw new Error('O código não contém uma arma.')
+    if (weaponItem.rank > 30) throw new Error('O ranque da arma tem de estar entre 0 e 30.')
+    if (weaponItem.slots.length !== 8) throw new Error('A build tem de conter exactamente oito slots.')
+
+    const weapon = catalog.weapons.find((item) => item.uniqueName === weaponItem.id)
+    if (!weapon) throw new Error('A arma do código não existe no catálogo local.')
+
+    const usedModIds = weaponItem.slots.flatMap((slot) => slot.modId ? [slot.modId] : [])
+    if (new Set(usedModIds).size !== usedModIds.length) throw new Error('A build contém o mesmo mod mais do que uma vez.')
+
+    const restoredSlots = weaponItem.slots.map((slot, index) => {
+      const mod = slot.modId ? modsById.get(slot.modId) : undefined
+      if (slot.modId && !mod) throw new Error(`O mod do slot ${index + 1} não existe no catálogo local.`)
+      if (mod && slot.rank > mod.fusionLimit) throw new Error(`O rank do mod ${mod.name} excede o máximo.`)
+      if (!polarityOptions.some(([polarity]) => polarity === slot.polarity)) {
+        throw new Error(`A polaridade do slot ${index + 1} não é reconhecida.`)
+      }
+
+      return {
+        modId: slot.modId,
+        rank: slot.rank,
+        polarity: slot.polarity,
+        factoryPolarity: weapon.polarities?.[index] ?? 'none',
+      }
+    })
+
+    restoreBuild(weapon.uniqueName, weaponItem.rank, weaponItem.catalyst, restoredSlots)
+    selectMod(null)
   }
 
   function importBuild(): void {
     try {
-      const decoded = decodeBuildCode(importCode)
-      const weaponItem = decoded.itens.find((item) => item.tipo === 'arma')
-      if (!weaponItem) throw new Error('O código não contém uma arma.')
-      if (weaponItem.rank > 30) throw new Error('O ranque da arma tem de estar entre 0 e 30.')
-      if (weaponItem.slots.length !== 8) throw new Error('A build tem de conter exactamente oito slots.')
-
-      const weapon = catalog.weapons.find((item) => item.uniqueName === weaponItem.id)
-      if (!weapon) throw new Error('A arma do código não existe no catálogo local.')
-
-      const usedModIds = weaponItem.slots.flatMap((slot) => slot.modId ? [slot.modId] : [])
-      if (new Set(usedModIds).size !== usedModIds.length) throw new Error('A build contém o mesmo mod mais do que uma vez.')
-
-      const restoredSlots = weaponItem.slots.map((slot, index) => {
-        const mod = slot.modId ? modsById.get(slot.modId) : undefined
-        if (slot.modId && !mod) throw new Error(`O mod do slot ${index + 1} não existe no catálogo local.`)
-        if (mod && slot.rank > mod.fusionLimit) throw new Error(`O rank do mod ${mod.name} excede o máximo.`)
-        if (!polarityOptions.some(([polarity]) => polarity === slot.polarity)) {
-          throw new Error(`A polaridade do slot ${index + 1} não é reconhecida.`)
-        }
-
-        return {
-          modId: slot.modId,
-          rank: slot.rank,
-          polarity: slot.polarity,
-          factoryPolarity: weapon.polarities?.[index] ?? 'none',
-        }
-      })
-
-      restoreBuild(weapon.uniqueName, weaponItem.rank, weaponItem.catalyst, restoredSlots)
-      selectMod(null)
+      applyBuildCode(importCode)
+      setView('armas')
       setImportError('')
       setImportOpen(false)
       setImportCode('')
       setCodeFeedback('Build importada')
     } catch (error) {
       setImportError(error instanceof Error ? error.message : 'Não foi possível importar esta build.')
+    }
+  }
+
+  function openLibraryBuild(entry: LibraryEntry): void {
+    try {
+      applyBuildCode(entry.codigo)
+      setView('armas')
+      setCodeFeedback(`Build "${entry.nome}" aberta`)
+    } catch (error) {
+      setLibraryFeedback(`${entry.nome}: ${error instanceof Error ? error.message : 'não foi possível abrir.'}`)
+    }
+  }
+
+  function updateSavedBuilds(builds: SavedBuild[]): boolean {
+    setSavedBuilds(builds)
+    return storeSavedBuilds(builds)
+  }
+
+  function saveCurrentBuild(): void {
+    const nome = saveName.trim()
+    if (!buildCode || !nome) return
+    const stored = updateSavedBuilds(upsertSavedBuild(savedBuilds, { nome, autor: '', descricao: '', codigo: buildCode, guardadaEm: new Date().toISOString() }))
+    setCodeFeedback(stored ? `Guardada na biblioteca como "${nome}"` : 'Guardada só nesta sessão: o browser bloqueou o armazenamento')
+    setSaveName('')
+  }
+
+  function deleteSavedBuild(entry: LibraryEntry): void {
+    if (!window.confirm(`Apagar a build "${entry.nome}"?`)) return
+    updateSavedBuilds(savedBuilds.filter((item) => item !== entry))
+    setLibraryFeedback(`Build "${entry.nome}" apagada`)
+  }
+
+  function renderLibraryCard({ entry, valid, weapon }: ReturnType<typeof describeEntry>, local: boolean) {
+    return (
+      <article key={`${local ? 'local' : 'shared'}-${entry.codigo}`} className={`library-card ${valid ? '' : 'is-invalid'}`}>
+        <div className="library-card-head">
+          {weapon ? <ItemImage name={weapon.name} imageName={weapon.imageName} /> : <span className="item-image"><BookOpen size={16} /></span>}
+          <div>
+            <h2>{entry.nome || weapon?.name || 'Build sem nome'}</h2>
+            <span>{weapon?.name ?? (valid ? 'Arma fora do catálogo' : 'Código inválido')}{entry.autor ? ` · ${entry.autor}` : ''}</span>
+          </div>
+        </div>
+        {entry.descricao && <p>{entry.descricao}</p>}
+        <div className="library-card-actions">
+          {local && <button type="button" className="command-button library-delete" onClick={() => deleteSavedBuild(entry)} aria-label={`Apagar ${entry.nome}`}><Trash2 size={14} /></button>}
+          <button type="button" className="command-button" onClick={() => copyLibraryCode(entry)}><Copy size={14} />Copiar código</button>
+          <button type="button" className="install-code-button" disabled={!valid || catalogLoading} onClick={() => openLibraryBuild(entry)}><FileInput size={14} />Abrir no editor</button>
+        </div>
+      </article>
+    )
+  }
+
+  async function copyLibraryCode(entry: LibraryEntry): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(entry.codigo)
+      setLibraryFeedback(`Código de "${entry.nome}" copiado`)
+    } catch {
+      setLibraryFeedback('Não foi possível copiar neste browser')
     }
   }
 
@@ -369,9 +467,9 @@ export default function App() {
 
         <nav className="main-nav" aria-label="Secções principais">
           <button type="button" className="nav-item" disabled><Shield size={15} />Warframes<span className="nav-soon">BREVEMENTE</span></button>
-          <button type="button" className="nav-item is-active" aria-current="page"><Swords size={15} />Armas</button>
+          <button type="button" className={`nav-item ${view === 'armas' ? 'is-active' : ''}`} aria-current={view === 'armas' ? 'page' : undefined} onClick={() => setView('armas')}><Swords size={15} />Armas</button>
           <button type="button" className="nav-item" disabled><Boxes size={15} />Companheiros<span className="nav-soon">BREVEMENTE</span></button>
-          <button type="button" className="nav-item" disabled><Layers3 size={15} />Biblioteca<span className="nav-soon">BREVEMENTE</span></button>
+          <button type="button" className={`nav-item ${view === 'biblioteca' ? 'is-active' : ''}`} aria-current={view === 'biblioteca' ? 'page' : undefined} onClick={() => setView('biblioteca')}><Layers3 size={15} />Biblioteca</button>
         </nav>
 
         <div className="topbar-actions">
@@ -389,6 +487,7 @@ export default function App() {
         </div>
       </header>
 
+      {view === 'armas' ? (<>
       <section className="page-heading" id="top">
         <div>
           <div className="eyebrow"><span>01</span> / ARSENAL</div>
@@ -597,13 +696,13 @@ export default function App() {
               </div>
 
               <div className="build-code-section">
-                <div className="section-rule"><span>CÓDIGO DA BUILD</span><span>WFB1 · V1</span></div>
-                <div className="build-code-controls">
-                  <input aria-label="Código da build" readOnly value={buildCode} />
-                  <button type="button" onClick={copyBuildCode} disabled={!buildCode}>
-                    <Copy size={14} />Copiar código
+                <div className="section-rule"><span>GUARDAR BUILD</span><span>BIBLIOTECA</span></div>
+                <form className="build-code-controls" onSubmit={(event) => { event.preventDefault(); saveCurrentBuild() }}>
+                  <input aria-label="Nome da build" value={saveName} onChange={(event) => setSaveName(event.target.value)} placeholder="Nome da build, ex.: Braton crítico" maxLength={60} />
+                  <button type="submit" disabled={!buildCode || !saveName.trim()}>
+                    <Save size={14} />Guardar na biblioteca
                   </button>
-                </div>
+                </form>
                 {codeFeedback && <small className="code-feedback" role="status">{codeFeedback}</small>}
               </div>
 
@@ -648,6 +747,49 @@ export default function App() {
           )}
         </aside>
       </section>
+
+      </>) : (
+        <>
+          <section className="page-heading" id="top">
+            <div>
+              <div className="eyebrow"><span>04</span> / BIBLIOTECA</div>
+              <h1>Builds partilhadas</h1>
+              <p>As suas builds ficam guardadas neste browser. Para partilhar, copie o código.</p>
+            </div>
+            <div className="catalog-counts"><span><b>{savedBuilds.length + libraryEntries.length}</b> builds</span></div>
+          </section>
+
+          <section className="library-panel" aria-label="Biblioteca de builds">
+            <label className="search-box library-search">
+              <Search size={16} aria-hidden="true" />
+              <input value={libraryQuery} onChange={(event) => setLibraryQuery(event.target.value)} placeholder="Pesquisar por nome, autor ou arma..." aria-label="Pesquisar builds" />
+            </label>
+            {libraryFeedback && <small className="code-feedback" role="status">{libraryFeedback}</small>}
+
+            <div className="section-rule"><span>AS MINHAS BUILDS</span><span>GUARDADAS NESTE BROWSER · {savedBuilds.length}</span></div>
+            {visibleSavedBuilds.length ? (
+              <div className="library-grid">
+                {visibleSavedBuilds.map((item) => renderLibraryCard(item, true))}
+              </div>
+            ) : (
+              <EmptyState title={savedBuilds.length ? 'Sem resultados' : 'Ainda sem builds guardadas'} detail={savedBuilds.length ? 'Tente outro nome ou arma.' : 'No editor de armas, dê um nome à build e carregue em "Guardar na biblioteca".'} />
+            )}
+
+            <div className="section-rule"><span>PARTILHADAS</span><span>{(library?.source ?? 'builds.json').toLocaleUpperCase('pt-PT')} · {libraryEntries.length}</span></div>
+            {libraryError ? (
+              <EmptyState title="Biblioteca indisponível" detail={libraryError} />
+            ) : !library ? (
+              <EmptyState title="A carregar biblioteca" detail="A ler a lista de builds partilhadas." />
+            ) : visibleLibraryEntries.length ? (
+              <div className="library-grid">
+                {visibleLibraryEntries.map((item) => renderLibraryCard(item, false))}
+              </div>
+            ) : (
+              <EmptyState title={libraryEntries.length ? 'Sem resultados' : 'Biblioteca vazia'} detail={libraryEntries.length ? 'Tente outro nome, autor ou arma.' : 'Ainda não há builds partilhadas no site.'} />
+            )}
+          </section>
+        </>
+      )}
 
       {modPickerSlot !== null && selectedWeapon && (
         <div className="picker-backdrop" onClick={(event) => event.target === event.currentTarget && setModPickerSlot(null)}>

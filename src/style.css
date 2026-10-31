@@ -317,6 +317,24 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 .picker-selected button { border-radius: 6px; }
 .build-code-dialog textarea { border-color: #33445a; border-radius: 6px; background: #0b0f14; font-size: 13px; }
 
+.library-panel { display: flex; flex-direction: column; gap: 14px; min-height: calc(100vh - 250px); padding: 18px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.library-search { max-width: 460px; }
+.library-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.library-card { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid #2b3a4e; border-radius: 6px; background: var(--surface-raised); }
+.library-card:hover { border-color: #33445a; }
+.library-card.is-invalid { border-color: var(--red); }
+.library-card-head { display: flex; align-items: center; gap: 12px; }
+.library-card-head > div { min-width: 0; }
+.library-card-head .item-image { width: 44px; height: 44px; flex-basis: 44px; color: var(--gold); }
+.library-card h2 { margin: 0; overflow: hidden; color: var(--text); font: 700 20px Rajdhani, sans-serif; text-overflow: ellipsis; white-space: nowrap; }
+.library-card-head span { color: var(--muted); font-size: 13px; }
+.library-card p { margin: 0; color: var(--text-soft); font-size: 13px; line-height: 1.55; }
+.library-card-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: auto; }
+.library-card-actions button { min-height: 36px; font-size: 13px; }
+.library-delete { margin-right: auto; color: var(--muted); }
+.library-delete:hover { border-color: var(--red); color: var(--red); }
+.build-code-section form.build-code-controls { margin-top: 10px; }
+
 @media (min-width: 1500px) {
   .app-shell { max-width: 1760px; margin: 0 auto; padding-right: 56px; padding-left: 56px; }
   .catalog-layout { min-height: calc(100vh - 260px); }

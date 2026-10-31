@@ -32,6 +32,8 @@ jobs:
         run: npm test
       - name: Construir aplicação
         run: npm run build
+        env:
+          VITE_LIBRARY_CSV_URL: ${{ vars.LIBRARY_CSV_URL }}
       - name: Preparar GitHub Pages
         uses: actions/configure-pages@v5
       - name: Carregar artefacto
