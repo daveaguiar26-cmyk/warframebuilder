@@ -1,15 +1,16 @@
 import { useMemo, useState } from 'react'
-import { Activity, ArrowUpRight, Copy, Heart, Plus, Save, Search, Shield, Trash2, X } from 'lucide-react'
+import { Activity, ArrowUpRight, Copy, Crosshair, Heart, Layers3, Plus, Save, Search, Shield, Swords, Trash2, X, Zap } from 'lucide-react'
 import { calculateCapacity, getRankedDrain, getSlotDrain } from '../engine/capacity'
 import { calculateCompanionStats } from '../engine/companion'
+import { calculateWeaponStats } from '../engine/weapon'
 import type { ModSlot } from '../engine/types'
 import { encodeBuildCode } from '../lib/buildCode'
-import { companionRank, toCompanionBuildItem } from '../lib/companionBuild'
+import { companionRank, toCompanionBuildItems } from '../lib/companionBuild'
 import { filterModsForCompanion } from '../lib/modCompatibility'
 import { searchItems } from '../lib/search'
 import { useCompanionStore } from '../store/useCompanionStore'
-import type { CatalogData, CompanionRecord } from '../types'
-import { EmptyState, ItemImage, ModRow, Stat, formatNumber, matchesSlotPolarity, polarityOptions } from '../ui/common'
+import { companionWeaponType, type CatalogData, type CompanionRecord } from '../types'
+import { EmptyState, ItemImage, ModRow, Stat, formatNumber, formatPercent, matchesSlotPolarity, polarityOptions } from '../ui/common'
 
 const kindNames = { Sentinel: 'Sentinela', Beast: 'Besta' } as const
 
@@ -35,8 +36,8 @@ function CompanionRow({ companion, active, onSelect }: { companion: CompanionRec
 export function CompanionView({ catalog, catalogLoading, onSave }: CompanionViewProps) {
   const companions = catalog.companions ?? []
   const {
-    query, companionId, reactor, slots,
-    setQuery, selectCompanion, equipMod, removeMod, setModRank, setSlotPolarity, setReactor,
+    query, companionId, reactor, slots, weaponId,
+    setQuery, setWeapon, selectCompanion, equipMod, removeMod, setModRank, setSlotPolarity, setReactor,
   } = useCompanionStore()
   const [pickerSlot, setPickerSlot] = useState<number | null>(null)
   const [modQuery, setModQuery] = useState('')
@@ -61,8 +62,14 @@ export function CompanionView({ catalog, catalogLoading, onSave }: CompanionView
     : null, [companion, modSlots])
   const capacity = calculateCapacity({ rank: companionRank, catalyst: reactor, slots: modSlots })
   const buildCode = companion
-    ? encodeBuildCode({ v: 1, itens: [toCompanionBuildItem({ companionId: companion.uniqueName, reactor, slots })] })
+    ? encodeBuildCode({ v: 1, itens: toCompanionBuildItems({ companionId: companion.uniqueName, reactor, slots, weaponId }) })
     : ''
+  const companionWeapons = useMemo(
+    () => catalog.weapons.filter((weapon) => weapon.type === companionWeaponType).sort((a, b) => a.name.localeCompare(b.name)),
+    [catalog.weapons],
+  )
+  const weapon = companion?.kind === 'Sentinel' ? companionWeapons.find((entry) => entry.uniqueName === weaponId) : undefined
+  const weaponStats = useMemo(() => weapon ? calculateWeaponStats({ weapon }) : null, [weapon])
   const pickerMods = useMemo(
     () => companion && pickerSlot !== null ? searchItems(filterModsForCompanion(catalog.mods, companion.kind), modQuery) : [],
     [catalog.mods, companion, pickerSlot, modQuery],
@@ -140,7 +147,7 @@ export function CompanionView({ catalog, catalogLoading, onSave }: CompanionView
         <div>
           <div className="eyebrow"><span>03</span> / COMPANHEIROS</div>
           <h1>Editor de companheiro</h1>
-          <p>Sentinelas e bestas no ranque 30. As armas das sentinelas estão no separador Armas.</p>
+          <p>Sentinelas e bestas no ranque 30. As sentinelas incluem a respectiva arma.</p>
         </div>
         <div className="catalog-counts"><span><b>{companions.length}</b> companheiros</span></div>
       </section>
@@ -207,6 +214,29 @@ export function CompanionView({ catalog, catalogLoading, onSave }: CompanionView
 
               <div className="section-rule build-section-heading"><span>MODS DA BUILD</span><span>{modSlots.filter((slot) => slot.mod).length} / {modSlots.length}</span></div>
               <div className="build-slot-grid">{modSlots.map(renderSlot)}</div>
+
+              {companion.kind === 'Sentinel' && (
+                <>
+                  <div className="section-rule lower-rule"><span>ARMA DA SENTINELA</span><span>CALCULADA COMO ARMA</span></div>
+                  <div className="arcane-slot">
+                    <select value={weaponId ?? ''} onChange={(event) => setWeapon(event.target.value || null)} aria-label="Arma da sentinela">
+                      <option value="">Sem arma</option>
+                      {companionWeapons.map((entry) => <option key={entry.uniqueName} value={entry.uniqueName}>{entry.name}</option>)}
+                    </select>
+                    {weapon && weaponStats && (
+                      <div className="side-stats-grid">
+                        <Stat icon={Zap} label="DPS de referência" value={formatNumber(weaponStats.referenceDps, 0)} />
+                        <Stat icon={Zap} label="Dano total" value={formatNumber(weaponStats.totalDamage)} />
+                        <Stat icon={Crosshair} label="Chance crítica" value={formatPercent(weaponStats.criticalChance)} />
+                        <Stat icon={Activity} label="Multiplicador crítico" value={`${formatNumber(weaponStats.criticalMultiplier)}×`} />
+                        <Stat icon={Activity} label="Chance de estado" value={formatPercent(weaponStats.statusChance)} />
+                        <Stat icon={Layers3} label="Multishot" value={`${formatNumber(weaponStats.multishot)}×`} />
+                        <Stat icon={Swords} label="Cadência" value={`${formatNumber(weaponStats.fireRate)} /s`} />
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
 
               <div className="build-code-section">
                 <div className="section-rule"><span>GUARDAR BUILD</span><span>BIBLIOTECA</span></div>

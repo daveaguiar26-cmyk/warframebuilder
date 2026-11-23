@@ -8,6 +8,8 @@ interface CompanionState {
   companionId: string | null
   reactor: boolean
   slots: BuildModSlot[]
+  weaponId: string | null
+  setWeapon: (weaponId: string | null) => void
   setQuery: (query: string) => void
   selectCompanion: (companion: CompanionRecord) => void
   equipMod: (slotIndex: number, modId: string) => boolean
@@ -27,11 +29,14 @@ export const useCompanionStore = create<CompanionState>((set) => ({
   companionId: null,
   reactor: false,
   slots: createCompanionSlots(),
+  weaponId: null,
+  setWeapon: (weaponId) => set({ weaponId }),
   setQuery: (query) => set({ query }),
   selectCompanion: (companion) => set((state) => state.companionId === companion.uniqueName ? state : {
     companionId: companion.uniqueName,
     reactor: false,
     slots: createCompanionSlots(companion),
+    weaponId: null,
   }),
   equipMod: (slotIndex, modId) => {
     let equipped = false
@@ -46,5 +51,5 @@ export const useCompanionStore = create<CompanionState>((set) => ({
   setModRank: (slotIndex, rank) => set((state) => ({ slots: updateSlot(state.slots, slotIndex, { rank }) })),
   setSlotPolarity: (slotIndex, polarity) => set((state) => ({ slots: updateSlot(state.slots, slotIndex, { polarity }) })),
   setReactor: (reactor) => set({ reactor }),
-  restore: ({ companionId, reactor, slots }) => set({ companionId, reactor, slots }),
+  restore: ({ companionId, reactor, slots, weaponId }) => set({ companionId, reactor, slots, weaponId }),
 }))

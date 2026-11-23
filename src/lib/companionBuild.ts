@@ -1,4 +1,4 @@
-import type { CompanionRecord, ModRecord } from '../types'
+import { companionWeaponType, type CompanionRecord, type ModRecord, type WeaponRecord } from '../types'
 import type { BuildModSlot } from '../store/useCatalogStore'
 import type { BuildCodeItem } from './buildCode'
 import { filterModsForCompanion } from './modCompatibility'
@@ -11,13 +11,24 @@ export interface CompanionBuildState {
   companionId: string
   reactor: boolean
   slots: BuildModSlot[]
+  /** Arma da sentinela (só sentinelas). */
+  weaponId: string | null
 }
+
+export const companionWeaponItemType = 'arma-companheiro'
 
 export function createCompanionSlots(companion?: CompanionRecord): BuildModSlot[] {
   return Array.from({ length: companionSlotCount }, (_, index) => {
     const factoryPolarity = companion?.polarities?.[index] ?? 'none'
     return { modId: null, rank: 0, polarity: factoryPolarity, factoryPolarity }
   })
+}
+
+/** Itens do código: o companheiro e, se existir, a arma da sentinela. */
+export function toCompanionBuildItems(state: CompanionBuildState): BuildCodeItem[] {
+  const items = [toCompanionBuildItem(state)]
+  if (state.weaponId) items.push({ tipo: companionWeaponItemType, id: state.weaponId, rank: companionRank, catalyst: false, slots: [] })
+  return items
 }
 
 export function toCompanionBuildItem(state: CompanionBuildState): BuildCodeItem {
@@ -32,7 +43,8 @@ export function toCompanionBuildItem(state: CompanionBuildState): BuildCodeItem 
 
 export function restoreCompanionBuild(
   item: BuildCodeItem,
-  catalog: { companions: CompanionRecord[]; mods: ModRecord[] },
+  catalog: { companions: CompanionRecord[]; mods: ModRecord[]; weapons?: WeaponRecord[] },
+  allItems: BuildCodeItem[] = [item],
 ): CompanionBuildState {
   const companion = catalog.companions.find((entry) => entry.uniqueName === item.id)
   if (!companion) throw new Error('O companheiro do código não existe no catálogo local.')
@@ -53,5 +65,14 @@ export function restoreCompanionBuild(
     return { modId: slot.modId, rank: slot.rank, polarity: slot.polarity, factoryPolarity: companion.polarities?.[index] ?? 'none' }
   })
 
-  return { companionId: companion.uniqueName, reactor: item.catalyst, slots }
+  const weaponItem = allItems.find((entry) => entry.tipo === companionWeaponItemType)
+  let weaponId: string | null = null
+  if (weaponItem) {
+    if (companion.kind !== 'Sentinel') throw new Error('Só as sentinelas têm arma.')
+    const weapon = catalog.weapons?.find((entry) => entry.uniqueName === weaponItem.id && entry.type === companionWeaponType)
+    if (!weapon) throw new Error('A arma da sentinela não existe no catálogo local.')
+    weaponId = weapon.uniqueName
+  }
+
+  return { companionId: companion.uniqueName, reactor: item.catalyst, slots, weaponId }
 }

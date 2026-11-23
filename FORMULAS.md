@@ -115,7 +115,8 @@ sessão. As divergências e aproximações estão assinaladas junto de cada regr
 	bestas (`/Sentinel/Kubrow/`) nem preceitos de bestas (`/Friendly/Pets/`); as
 	bestas não usam preceitos de sentinela. Preceitos exclusivos de um
 	companheiro específico ainda não são filtrados.
-- Armas de sentinela: entram no separador Armas e são calculadas como armas. A
-	chance de estado vem de `procChance`. Os dados não indicam a classe da arma
-	(espingarda, caçadeira...), por isso a lista de mods compatíveis está
-	incompleta.
+- Armas de sentinela: escolhem-se no separador Companheiros, junto da sentinela,
+	vão no mesmo código (item `arma-companheiro`) e são calculadas como armas. A
+	chance de estado vem de `procChance`. Por agora mostram-se só os valores base,
+	sem mods: os dados não indicam a classe da arma (espingarda, caçadeira...),
+	que é preciso para saber que mods aceita.

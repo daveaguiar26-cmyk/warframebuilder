@@ -34,7 +34,7 @@ import { WarframeView } from './views/WarframeView'
 import { CompanionView } from './views/CompanionView'
 import { useCompanionStore } from './store/useCompanionStore'
 import { restoreCompanionBuild } from './lib/companionBuild'
-import type { CatalogData, ModRecord, WeaponRecord } from './types'
+import { companionWeaponType, type CatalogData, type ModRecord, type WeaponRecord } from './types'
 import { EmptyState, ItemImage, ModRow, Stat, formatNumber, formatPercent, matchesSlotPolarity, polarityOptions } from './ui/common'
 
 const emptyCatalog: CatalogData = {
@@ -206,7 +206,7 @@ export default function App() {
   const visibleLibraryEntries = libraryEntries.filter(matchesLibraryQuery)
 
   const weapons = useMemo(() => {
-    const matching = searchItems(catalog.weapons, weaponQuery)
+    const matching = searchItems(catalog.weapons.filter((weapon) => weapon.type !== companionWeaponType), weaponQuery)
     return matching.filter((weapon) => weaponFilter === 'All' || weapon.category === weaponFilter)
   }, [catalog.weapons, weaponFilter, weaponQuery])
 
@@ -277,7 +277,7 @@ export default function App() {
     }
     const companionItem = decoded.itens.find((item) => item.tipo === 'companheiro')
     if (companionItem) {
-      restoreCompanion(restoreCompanionBuild(companionItem, { companions: catalog.companions ?? [], mods: catalog.mods }))
+      restoreCompanion(restoreCompanionBuild(companionItem, { companions: catalog.companions ?? [], mods: catalog.mods, weapons: catalog.weapons }, decoded.itens))
       return 'companheiros'
     }
     const weaponItem = decoded.itens.find((item) => item.tipo === 'arma')
@@ -426,7 +426,7 @@ export default function App() {
           <p>Armas e mods, consultados a partir de dados locais do jogo.</p>
         </div>
         <div className="catalog-counts" aria-label="Tamanho do catálogo">
-          <span><b>{catalog.weapons.length.toLocaleString('pt-PT')}</b> armas</span>
+          <span><b>{catalog.weapons.filter((weapon) => weapon.type !== companionWeaponType).length.toLocaleString('pt-PT')}</b> armas</span>
           <i />
           <span><b>{catalog.mods.length.toLocaleString('pt-PT')}</b> mods</span>
         </div>

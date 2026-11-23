@@ -19,6 +19,9 @@ export interface WeaponRecord {
   polarities?: string[]
 }
 
+/** Armas de sentinela: geridas no separador Companheiros. */
+export const companionWeaponType = 'Companion Weapon'
+
 export interface ModRecord {
   uniqueName: string
   name: string
