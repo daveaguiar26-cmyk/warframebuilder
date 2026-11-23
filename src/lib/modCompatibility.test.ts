@@ -83,7 +83,7 @@ describe('filterModsForCompanion', () => {
 
   it('separates mods and precepts by companion type', () => {
     expect(filterModsForCompanion(all, 'Sentinel').map((mod) => mod.name)).toEqual(['Enhanced Vitality', 'Primed Regen'])
-    expect(filterModsForCompanion(all, 'Beast').map((mod) => mod.name)).toEqual(['Enhanced Vitality', 'Bite', 'Charm'])
+    expect(filterModsForCompanion(all, 'Beast').map((mod) => mod.name)).toEqual(['Enhanced Vitality', 'Charm'])
     expect(filterModsForCompanion(all, 'MOA').map((mod) => mod.name)).toEqual(['Enhanced Vitality', 'Anti-Grav Grenade'])
     expect(filterModsForCompanion(all, 'Hound').map((mod) => mod.name)).toEqual(['Enhanced Vitality', 'Null Audit'])
   })

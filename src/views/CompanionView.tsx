@@ -12,6 +12,8 @@ import {
   getCompanionWeapon,
   getRoboticWeapons,
   hasWeaponMods,
+  isBeastClaws,
+  postureSlotIndex,
   toCompanionBuildItems,
 } from '../lib/companionBuild'
 import { modularCompanions, partLabels, partOptions, type PartOption } from '../data/companionData'
@@ -81,7 +83,7 @@ export function CompanionView({ catalog, catalogLoading, onSave }: CompanionView
     rank: slot.rank,
   }))
   const modSlots = useMemo(() => toModSlots(slots), [slots, modsById])
-  const weaponModSlots = useMemo(() => toModSlots(weaponSlots), [weaponSlots, modsById])
+  const rawWeaponModSlots = useMemo(() => toModSlots(weaponSlots), [weaponSlots, modsById])
   const rankedMods = (entries: ModSlot[]): RankedWeaponMod[] =>
     entries.flatMap((slot) => slot.mod ? [{ slotIndex: slot.index, mod: slot.mod, rank: slot.rank ?? 0 }] : [])
 
@@ -92,19 +94,23 @@ export function CompanionView({ catalog, catalogLoading, onSave }: CompanionView
   const roboticWeapons = useMemo(() => getRoboticWeapons(catalog.weapons), [catalog.weapons])
   const weapon = companion ? getCompanionWeapon(companion, { weaponId, parts }, catalog.weapons) : undefined
   const weaponModdable = hasWeaponMods(weapon)
+  // O slot de Postura das garras funciona como uma Stance: dá capacidade em vez de a gastar.
+  const weaponModSlots = useMemo(() => rawWeaponModSlots.map((slot): ModSlot =>
+    isBeastClaws(weapon) && slot.index === postureSlotIndex ? { ...slot, kind: 'stance' } : slot,
+  ), [rawWeaponModSlots, weapon])
   const buildCode = companion
     ? encodeBuildCode({ v: 1, itens: toCompanionBuildItems({ companionId: companion.uniqueName, reactor, slots, weaponId, parts, weaponSlots, weaponCatalyst }, weapon) })
     : ''
   // Garras de bestas: os mods do companheiro (Bite, Maul...) aplicam-se às garras.
   const weaponStats = useMemo(() => {
     if (!weapon) return null
-    return calculateWeaponStats({ weapon, mods: rankedMods(weaponModdable ? weaponModSlots : modSlots) })
-  }, [weapon, weaponModdable, weaponModSlots, modSlots])
+    return calculateWeaponStats({ weapon, mods: rankedMods(weaponModSlots.filter((slot) => slot.kind !== 'stance')) })
+  }, [weapon, weaponModSlots])
   const weaponCapacity = calculateCapacity({ rank: companionRank, catalyst: weaponCatalyst, slots: weaponModSlots })
   const pickerMods = useMemo(() => {
     if (!companion || !picker) return []
     const compatible = picker.target === 'weapon'
-      ? (weapon ? filterModsForCompanionWeaponRecord(catalog.mods, weapon) : [])
+      ? (weapon ? filterModsForCompanionWeaponRecord(catalog.mods, weapon, picker.index) : [])
       : filterModsForCompanion(catalog.mods, companion.kind)
     return searchItems(compatible, modQuery)
   }, [catalog.mods, companion, picker, weapon, modQuery])
@@ -155,7 +161,7 @@ export function CompanionView({ catalog, catalogLoading, onSave }: CompanionView
     return (
       <div className={`build-slot ${mod ? 'has-mod' : 'is-empty'} ${matchClass}`} key={index}>
         <div className="build-slot-head">
-          <span>SLOT {String(index + 1).padStart(2, '0')}</span>
+          <span>{slot.kind === 'stance' ? 'POSTURA' : `SLOT ${String(index + 1).padStart(2, '0')}`}</span>
           {mod && <button className="slot-remove-button" type="button" onClick={() => removeMod(target, index)} aria-label={`Remover ${mod.name}`}><Trash2 size={12} /></button>}
         </div>
         {mod ? (
@@ -303,7 +309,6 @@ export function CompanionView({ catalog, catalogLoading, onSave }: CompanionView
                   </div>
                 )}
                 {weapon && !weapon.fireRate && <p className="arcane-effect">A wiki não indica a velocidade de ataque destas garras, por isso não há DPS de referência.</p>}
-                {weapon && !weaponModdable && <p className="arcane-effect">As garras usam os mods do companheiro (Bite, Maul...), já aplicados acima.</p>}
               </div>
 
               {weapon && weaponModdable && (

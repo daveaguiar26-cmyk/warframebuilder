@@ -7,7 +7,7 @@ import type { CompanionRecord, WeaponRecord } from '../types'
 export interface StatModifier { health: number; shield: number; armor: number }
 export interface PartOption extends Partial<StatModifier> { name: string; polarity?: string }
 
-/** https://wiki.warframe.com/w/Claws_(Beast). A página não indica velocidade de ataque. */
+/** https://wiki.warframe.com/w/Claws_(Beast). A página não indica velocidade de ataque. Tipo 'Beast Claws' = beastClawsType. */
 const claw = (companion: string, damage: Record<string, number>, criticalChance: number, criticalMultiplier: number, statusChance: number): WeaponRecord => ({
   uniqueName: `/Builder/BeastClaws/${companion.replaceAll(' ', '')}`,
   name: `Garras de ${companion}`,

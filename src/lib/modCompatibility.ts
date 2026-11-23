@@ -75,14 +75,15 @@ const preceptFolders: Record<'Sentinel' | 'Beast' | 'MOA' | 'Hound', string[]> =
 const allPreceptFolders = Object.values(preceptFolders).flat()
 
 /**
- * Mods de companheiro. Mods gerais (/Mods/Sentinel/) servem todos, excepto os de bestas
- * (/Sentinel/Kubrow/), que só servem bestas. Preceitos só servem o tipo dono da pasta.
+ * Mods de companheiro. Mods gerais (/Mods/Sentinel/) servem todos. Os mods de garras
+ * (/Sentinel/Kubrow/) ficam nas garras. Preceitos só servem o tipo dono da pasta.
  */
 export function filterModsForCompanion(mods: ModRecord[], kind: 'Sentinel' | 'Beast' | 'MOA' | 'Hound'): ModRecord[] {
   return mods.filter((mod) => {
     if (mod.type !== 'Companion Mod' || isInternalProgressionVariant(mod)) return false
     const path = mod.uniqueName
-    if (path.includes('/Sentinel/Kubrow/')) return kind === 'Beast'
+    // Mods de garras (Bite, Maul...) vão para as garras, não para o companheiro.
+    if (path.includes('/Sentinel/Kubrow/')) return false
     const owner = allPreceptFolders.find((folder) => path.includes(folder))
     return owner === undefined || preceptFolders[kind].includes(owner)
   })

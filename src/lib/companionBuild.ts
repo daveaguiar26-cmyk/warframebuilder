@@ -18,6 +18,17 @@ export const companionRank = 30
 export const companionSlotCount = 10
 /** Slots de mods da arma (como as restantes armas; número por confirmar na wiki). */
 export const companionWeaponSlotCount = 8
+/** As garras de bestas têm mais um slot de Postura (funciona como uma Stance). */
+export const postureSlotIndex = 8
+export const beastClawsType = 'Beast Claws'
+
+export function isBeastClaws(weapon: WeaponRecord | undefined): boolean {
+  return weapon?.type === beastClawsType
+}
+
+export function weaponSlotCount(weapon?: WeaponRecord): number {
+  return isBeastClaws(weapon) ? companionWeaponSlotCount + 1 : companionWeaponSlotCount
+}
 
 export interface CompanionBuildState {
   companionId: string
@@ -33,18 +44,22 @@ export interface CompanionBuildState {
 }
 
 export function createWeaponSlots(weapon?: WeaponRecord): BuildModSlot[] {
-  return Array.from({ length: companionWeaponSlotCount }, (_, index) => {
+  return Array.from({ length: weaponSlotCount(weapon) }, (_, index) => {
     const factoryPolarity = weapon?.polarities?.[index] ?? 'none'
     return { modId: null, rank: 0, polarity: factoryPolarity, factoryPolarity }
   })
 }
 
-/** A arma aceita mods próprios? (garras de bestas não: usam os mods do companheiro). */
 export function hasWeaponMods(weapon: WeaponRecord | undefined): boolean {
-  return weapon !== undefined && weapon.type !== 'Beast Claws' && getCompanionWeaponClass(weapon.name) !== undefined
+  return isBeastClaws(weapon) || (weapon !== undefined && getCompanionWeaponClass(weapon.name) !== undefined)
 }
 
-export function filterModsForCompanionWeaponRecord(mods: ModRecord[], weapon: WeaponRecord): ModRecord[] {
+/** Garras: mods de garras (/Sentinel/Kubrow/) nos slots normais e mods de Postura no slot de Postura. */
+export function filterModsForCompanionWeaponRecord(mods: ModRecord[], weapon: WeaponRecord, slotIndex?: number): ModRecord[] {
+  if (isBeastClaws(weapon)) {
+    if (slotIndex === postureSlotIndex) return mods.filter((mod) => mod.type === 'Posture Mod')
+    return mods.filter((mod) => mod.type === 'Companion Mod' && mod.uniqueName.includes('/Sentinel/Kubrow/'))
+  }
   return filterModsForCompanionWeapon(mods, weapon, getCompanionWeaponClass(weapon.name))
 }
 
@@ -137,7 +152,7 @@ export function restoreCompanionBuild(
 
   const weaponItem = allItems.find((entry) => entry.tipo === companionWeaponItemType)
   let weaponId: string | null = null
-  let weaponSlots = createWeaponSlots()
+  let weaponSlots = createWeaponSlots(canChooseWeapon(companion) ? undefined : getCompanionWeapon(companion, { weaponId: null, parts }, catalog.weapons ?? []))
   let weaponCatalyst = false
   if (weaponItem) {
     const weapon = canChooseWeapon(companion)
@@ -154,7 +169,7 @@ export function restoreCompanionBuild(
 
 function restoreWeaponSlots(item: BuildCodeItem, weapon: WeaponRecord, modsById: Map<string, ModRecord>): BuildModSlot[] {
   if (item.slots.length === 0) return createWeaponSlots(weapon)
-  if (item.slots.length !== companionWeaponSlotCount) throw new Error('A arma do companheiro tem de conter oito slots.')
+  if (item.slots.length !== weaponSlotCount(weapon)) throw new Error(`A arma do companheiro tem de conter ${weaponSlotCount(weapon)} slots.`)
   const usedModIds = item.slots.flatMap((slot) => slot.modId ? [slot.modId] : [])
   if (new Set(usedModIds).size !== usedModIds.length) throw new Error('A arma contém o mesmo mod mais do que uma vez.')
   return item.slots.map((slot, index) => {
@@ -162,7 +177,7 @@ function restoreWeaponSlots(item: BuildCodeItem, weapon: WeaponRecord, modsById:
     const mod = slot.modId ? modsById.get(slot.modId) : undefined
     if (slot.modId && !mod) throw new Error(`O mod do slot ${index + 1} da arma não existe no catálogo local.`)
     if (mod && slot.rank > mod.fusionLimit) throw new Error(`O rank do mod ${mod.name} excede o máximo.`)
-    if (mod && filterModsForCompanionWeaponRecord([mod], weapon).length === 0) {
+    if (mod && filterModsForCompanionWeaponRecord([mod], weapon, index).length === 0) {
       throw new Error(`O mod ${mod.name} não pode ser usado em ${weapon.name}.`)
     }
     return { modId: slot.modId, rank: slot.rank, polarity: slot.polarity, factoryPolarity: weapon.polarities?.[index] ?? 'none' }

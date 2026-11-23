@@ -137,9 +137,13 @@ sessão. As divergências e aproximações estão assinaladas junto de cada regr
 		frase; assumiu-se corpo a corpo. As variantes Prime/Prisma usam a classe
 		da base. Assumiram-se 8 slots, capacidade 30 e Catalyst, como nas outras
 		armas; falta confirmar.
-	- Garras de bestas: não têm slots próprios. Os mods de garras (Bite, Maul...)
-		são mods do companheiro ([Claws (Beast)](https://wiki.warframe.com/w/Claws_(Beast)))
-		e os efeitos percentuais reconhecidos entram no cálculo das garras.
+	- Garras de bestas: são uma arma com mods próprios. Os mods de garras
+		(Bite, Maul, Swipe...; pasta `/Sentinel/Kubrow/`) vão para os slots das
+		garras e deixam de aparecer nos slots do companheiro. "Each weapon features
+		a slot for Posture Mods, functioning similarly to Stances"
+		([Claws (Beast)](https://wiki.warframe.com/w/Claws_(Beast))): o slot de
+		Postura aceita mods `Posture Mod` e dá capacidade como uma Stance.
+		Assumiram-se 8 slots normais; falta confirmar no jogo.
 	- A arma vai no mesmo código (item `arma-companheiro`, com slots e Catalyst)
 		e é calculada pelo motor das armas.
 - MOA ([MOA (Companion)](https://wiki.warframe.com/w/MOA_(Companion))): base

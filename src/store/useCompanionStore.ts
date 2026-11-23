@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type { CompanionRecord, WeaponRecord } from '../types'
 import type { BuildModSlot } from './useCatalogStore'
 import { createCompanionSlots, createWeaponSlots, type CompanionBuildState } from '../lib/companionBuild'
-import { defaultParts, getCompanionPolarities, type CompanionParts } from '../data/companionData'
+import { beastClaws, defaultParts, getCompanionPolarities, type CompanionParts } from '../data/companionData'
 
 /** Que grelha de slots uma acção altera: a do companheiro ou a da arma. */
 export type SlotTarget = 'companion' | 'weapon'
@@ -54,7 +54,7 @@ export const useCompanionStore = create<CompanionState>((set) => ({
     slots: createCompanionSlots(companion, defaultParts(companion.kind)),
     weaponId: null,
     parts: defaultParts(companion.kind),
-    weaponSlots: createWeaponSlots(),
+    weaponSlots: createWeaponSlots(companion.kind === 'Beast' ? beastClaws[companion.name] : undefined),
     weaponCatalyst: false,
   }),
   setPart: (companion, slot, value) => set((state) => {
