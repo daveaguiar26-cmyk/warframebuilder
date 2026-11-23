@@ -57,3 +57,11 @@ Para usar uma folha do Google Sheets em vez do ficheiro:
 3. Defina o link em `VITE_LIBRARY_CSV_URL` (ficheiro `.env.local` para desenvolvimento, ou variável `LIBRARY_CSV_URL` do repositório no GitHub para o deploy).
 
 Linhas sem nome ou com código que não comece por `WFB1:` são ignoradas.
+
+## Importar build por imagem
+
+O botão **Importar imagem** aceita uma captura do ecrã de mods do jogo, colada (Ctrl+V),
+arrastada ou escolhida. O texto é lido no browser com [Tesseract.js](https://github.com/naptha/tesseract.js),
+carregado do CDN jsDelivr só quando o popup é usado. Os nomes lidos são comparados com o
+catálogo local, aceitando pequenos erros de leitura. Os ranques assumem o máximo e as
+polaridades ficam as de fábrica: confirme-os na pré-visualização antes de aplicar.

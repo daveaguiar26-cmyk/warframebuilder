@@ -19,6 +19,7 @@ import {
   Trash2,
   X,
   Zap,
+  ImageUp,
 } from 'lucide-react'
 import { calculateCapacity, getRankedDrain, getSlotDrain } from './engine/capacity'
 import type { DamageType, ModSlot, RankedWeaponMod } from './engine/types'
@@ -29,7 +30,12 @@ import { filterModsForWeapon } from './lib/modCompatibility'
 import { searchItems } from './lib/search'
 import { useCatalogStore, type WeaponFilter } from './store/useCatalogStore'
 import { useWarframeStore } from './store/useWarframeStore'
-import { restoreWarframeBuild } from './lib/warframeBuild'
+import { auraSlotIndex, createWarframeSlots, createArcaneSlots, exilusSlotIndex, restoreWarframeBuild } from './lib/warframeBuild'
+import { isAuraMod } from './lib/modCompatibility'
+import { createCompanionSlots, createWeaponSlots, getCompanionWeapon, postureSlotIndex } from './lib/companionBuild'
+import { defaultParts } from './data/companionData'
+import { ImageImportDialog, type ImageImportSelection } from './views/ImageImportDialog'
+import type { BuildModSlot } from './store/useCatalogStore'
 import { WarframeView } from './views/WarframeView'
 import { CompanionView } from './views/CompanionView'
 import { useCompanionStore } from './store/useCompanionStore'
@@ -147,6 +153,54 @@ export default function App() {
   } = useCatalogStore()
   const restoreWarframe = useWarframeStore((state) => state.restore)
   const restoreCompanion = useCompanionStore((state) => state.restore)
+  const [imageImportOpen, setImageImportOpen] = useState(false)
+
+  /** Coloca os mods lidos da imagem nos slots certos e abre o editor correspondente. */
+  function applyImageImport({ item, mods }: ImageImportSelection): void {
+    const fill = (slots: BuildModSlot[], index: number, mod: ModRecord, rank: number) => {
+      slots[index] = { ...slots[index], modId: mod.uniqueName, rank }
+    }
+    if (item.kind === 'arma') {
+      const weapon = catalog.weapons.find((entry) => entry.uniqueName === item.id)
+      if (!weapon) return
+      const slots: BuildModSlot[] = Array.from({ length: 8 }, (_, index) => {
+        const factoryPolarity = weapon.polarities?.[index] ?? 'none'
+        return { modId: null, rank: 0, polarity: factoryPolarity, factoryPolarity }
+      })
+      mods.slice(0, 8).forEach(({ mod, rank }, index) => fill(slots, index, mod, rank))
+      restoreBuild(weapon.uniqueName, 30, false, slots)
+      selectMod(null)
+      setView('armas')
+    } else if (item.kind === 'warframe') {
+      const frame = catalog.warframes?.find((entry) => entry.uniqueName === item.id)
+      if (!frame) return
+      const slots = createWarframeSlots(frame)
+      const aura = mods.find(({ mod }) => isAuraMod(mod))
+      if (aura) fill(slots, auraSlotIndex, aura.mod, aura.rank)
+      const others = mods.filter((entry) => entry !== aura)
+      const exilus = others.length > 8 ? others.find(({ mod }) => mod.isExilus) : undefined
+      if (exilus) fill(slots, exilusSlotIndex, exilus.mod, exilus.rank)
+      others.filter((entry) => entry !== exilus).slice(0, 8).forEach(({ mod, rank }, index) => fill(slots, index, mod, rank))
+      restoreWarframe({ frameId: frame.uniqueName, reactor: false, slots, arcanes: createArcaneSlots() })
+      setView('warframes')
+    } else {
+      const companion = [...(catalog.companions ?? []), ...modularCompanions].find((entry) => entry.uniqueName === item.id)
+      if (!companion) return
+      const parts = defaultParts(companion.kind)
+      const slots = createCompanionSlots(companion, parts)
+      const claws = companion.kind === 'Beast' ? getCompanionWeapon(companion, { weaponId: null, parts }, catalog.weapons) : undefined
+      const weaponSlots = createWeaponSlots(claws)
+      const clawMods = claws ? mods.filter(({ mod }) => mod.uniqueName.includes('/Sentinel/Kubrow/')) : []
+      const posture = claws ? mods.find(({ mod }) => mod.type === 'Posture Mod') : undefined
+      if (posture) fill(weaponSlots, postureSlotIndex, posture.mod, posture.rank)
+      clawMods.slice(0, 8).forEach(({ mod, rank }, index) => fill(weaponSlots, index, mod, rank))
+      mods.filter((entry) => entry !== posture && !clawMods.includes(entry)).slice(0, 10)
+        .forEach(({ mod, rank }, index) => fill(slots, index, mod, rank))
+      restoreCompanion({ companionId: companion.uniqueName, reactor: false, slots, weaponId: null, parts, weaponSlots, weaponCatalyst: false })
+      setView('companheiros')
+    }
+    setImageImportOpen(false)
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -403,6 +457,9 @@ export default function App() {
         <div className="topbar-actions">
           <button type="button" className="command-button" onClick={() => { setImportError(''); setImportOpen(true) }}>
             <FileInput size={14} />Importar código
+          </button>
+          <button type="button" className="command-button" onClick={() => setImageImportOpen(true)} disabled={catalogLoading}>
+            <ImageUp size={14} />Importar imagem
           </button>
         </div>
 
@@ -753,6 +810,19 @@ export default function App() {
             )}
           </section>
         </div>
+      )}
+
+      {imageImportOpen && (
+        <ImageImportDialog
+          catalog={{
+            weapons: catalog.weapons,
+            warframes: catalog.warframes ?? [],
+            companions: [...(catalog.companions ?? []), ...modularCompanions],
+            mods: catalog.mods,
+          }}
+          onApply={applyImageImport}
+          onClose={() => setImageImportOpen(false)}
+        />
       )}
 
       {importOpen && (
