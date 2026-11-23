@@ -167,7 +167,10 @@ export default function App() {
         const factoryPolarity = weapon.polarities?.[index] ?? 'none'
         return { modId: null, rank: 0, polarity: factoryPolarity, factoryPolarity }
       })
-      mods.slice(0, 8).forEach(({ mod, rank }, index) => fill(slots, index, mod, rank))
+      // O editor de armas ainda não tem slots de Stance nem de Exilus. No jogo, a linha de cima
+      // (lida primeiro) tem a Stance e o Exilus: com mais de 8 mods, o primeiro é o Exilus.
+      const normal = mods.filter(({ mod }) => mod.type !== 'Stance Mod')
+      normal.slice(normal.length > 8 ? 1 : 0).slice(0, 8).forEach(({ mod, rank }, index) => fill(slots, index, mod, rank))
       restoreBuild(weapon.uniqueName, 30, false, slots)
       selectMod(null)
       setView('armas')

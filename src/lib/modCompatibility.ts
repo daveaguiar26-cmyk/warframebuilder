@@ -1,6 +1,6 @@
 import type { ModRecord, WarframeRecord, WeaponRecord } from '../types'
 
-const internalProgressionTiers = new Set(['beginner', 'intermediate', 'expert'])
+const internalProgressionTiers = new Set(['beginner', 'intermediate'])
 const weaponTypeFolders = new Set([
   'rifle',
   'shotgun',
@@ -19,10 +19,32 @@ function normalizedTargets(weapon: WeaponRecord): Set<string> {
     .map((value) => value!.toLocaleLowerCase('en-US')))
 }
 
-function isInternalProgressionVariant(mod: ModRecord): boolean {
-  return mod.uniqueName
-    .split('/')
-    .some((segment) => internalProgressionTiers.has(segment.toLocaleLowerCase('en-US')))
+function tierFolders(mod: ModRecord): string[] {
+  return mod.uniqueName.split('/').map((segment) => segment.toLocaleLowerCase('en-US'))
+}
+
+/** Nomes dos mods "normais" (fora das pastas Beginner/Intermediate/Expert), por catálogo. */
+const regularNamesCache = new WeakMap<ModRecord[], Set<string>>()
+function regularNames(mods: ModRecord[]): Set<string> {
+  let names = regularNamesCache.get(mods)
+  if (!names) {
+    names = new Set(mods
+      .filter((mod) => !tierFolders(mod).some((segment) => internalProgressionTiers.has(segment) || segment === 'expert'))
+      .map((mod) => mod.name))
+    regularNamesCache.set(mods, names)
+  }
+  return names
+}
+
+/**
+ * Variantes internas de progressão. As pastas Beginner/Intermediate são sempre internas.
+ * A pasta Expert também guarda mods reais (Primed, Galvanized...): só é variante interna
+ * quando repete o nome de um mod normal (ex.: uma segunda "Intensify").
+ */
+function isInternalProgressionVariant(mod: ModRecord, mods: ModRecord[]): boolean {
+  const segments = tierFolders(mod)
+  if (segments.some((segment) => internalProgressionTiers.has(segment))) return true
+  return segments.includes('expert') && regularNames(mods).has(mod.name)
 }
 
 function matchesWeaponType(weapon: WeaponRecord, mod: ModRecord): boolean {
@@ -39,7 +61,7 @@ function matchesWeaponType(weapon: WeaponRecord, mod: ModRecord): boolean {
 }
 
 export function filterModsForWeapon(mods: ModRecord[], weapon: WeaponRecord): ModRecord[] {
-  return mods.filter((mod) => !isInternalProgressionVariant(mod) && matchesWeaponType(weapon, mod))
+  return mods.filter((mod) => !isInternalProgressionVariant(mod, mods) && matchesWeaponType(weapon, mod))
 }
 
 export type WarframeSlotKind = 'normal' | 'aura' | 'exilus'
@@ -57,7 +79,7 @@ export function isAuraMod(mod: ModRecord): boolean {
 export function filterModsForWarframe(mods: ModRecord[], frame: WarframeRecord, slot: WarframeSlotKind = 'normal'): ModRecord[] {
   const frameFolder = powersuitFolder(frame.uniqueName)
   return mods.filter((mod) => {
-    if (mod.type !== 'Warframe Mod' || isInternalProgressionVariant(mod)) return false
+    if (mod.type !== 'Warframe Mod' || isInternalProgressionVariant(mod, mods)) return false
     const modFolder = powersuitFolder(mod.uniqueName)
     if (modFolder && modFolder !== frameFolder) return false
     if (slot === 'aura') return isAuraMod(mod)
@@ -80,7 +102,7 @@ const allPreceptFolders = Object.values(preceptFolders).flat()
  */
 export function filterModsForCompanion(mods: ModRecord[], kind: 'Sentinel' | 'Beast' | 'MOA' | 'Hound'): ModRecord[] {
   return mods.filter((mod) => {
-    if (mod.type !== 'Companion Mod' || isInternalProgressionVariant(mod)) return false
+    if (mod.type !== 'Companion Mod' || isInternalProgressionVariant(mod, mods)) return false
     const path = mod.uniqueName
     // Mods de garras (Bite, Maul...) vão para as garras, não para o companheiro.
     if (path.includes('/Sentinel/Kubrow/')) return false
@@ -103,4 +125,9 @@ export function filterModsForCompanionWeapon(
     }
   }
   return [...unique.values()]
+}
+
+/** Mods jogáveis: sem variantes internas de progressão. */
+export function withoutInternalVariants(mods: ModRecord[]): ModRecord[] {
+  return mods.filter((mod) => !isInternalProgressionVariant(mod, mods))
 }

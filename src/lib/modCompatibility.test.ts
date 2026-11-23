@@ -40,9 +40,17 @@ describe('filterModsForWeapon', () => {
     const normal = mod('/Lotus/Upgrades/Mods/Rifle/WeaponDamageAmountMod')
     const beginner = mod('/Lotus/Upgrades/Mods/Rifle/Beginner/WeaponDamageAmountModBeginner')
     const intermediate = mod('/Lotus/Upgrades/Mods/Rifle/Intermediate/WeaponDamageAmountModIntermediate')
-    const expert = mod('/Lotus/Upgrades/Mods/Rifle/Expert/WeaponDamageAmountModExpert')
+    // Uma cópia Expert com o mesmo nome do mod normal é interna.
+    const expert = { ...mod('/Lotus/Upgrades/Mods/Rifle/Expert/WeaponDamageAmountModExpert'), name: normal.name }
 
     expect(filterModsForWeapon([normal, beginner, intermediate, expert], rifle)).toEqual([normal])
+  })
+
+  it('keeps real mods stored in the Expert folder (Primed, Galvanized)', () => {
+    const normal = mod('/Lotus/Upgrades/Mods/Rifle/WeaponDamageAmountMod')
+    const galvanized = { ...mod('/Lotus/Upgrades/Mods/Rifle/Expert/WeaponCritChanceSPMod'), name: 'Galvanized Scope' }
+
+    expect(filterModsForWeapon([normal, galvanized], rifle)).toEqual([normal, galvanized])
   })
 })
 

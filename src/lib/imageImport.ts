@@ -4,6 +4,7 @@
  */
 import type { CompanionRecord, ModRecord, WarframeRecord, WeaponRecord } from '../types'
 import { companionWeaponType } from '../types'
+import { filterModsForCompanion, filterModsForWarframe, filterModsForWeapon, isAuraMod, withoutInternalVariants } from './modCompatibility'
 
 export type DetectedKind = 'arma' | 'warframe' | 'companheiro'
 
@@ -45,6 +46,7 @@ interface Named { name: string }
 /**
  * Procura nomes no texto, do mais longo para o mais curto, e consome o trecho encontrado
  * para que "Serration" não seja também contado dentro de "Amalgam Serration".
+ * O resultado vem pela ordem de leitura da imagem (posição no texto).
  */
 export function findNamesInText<T extends Named>(text: string, candidates: T[]): T[] {
   let haystack = compact(text)
@@ -53,7 +55,7 @@ export function findNamesInText<T extends Named>(text: string, candidates: T[]):
     .filter(({ key }) => key.length >= 4)
     .sort((a, b) => b.key.length - a.key.length)
 
-  const found: T[] = []
+  const found: Array<{ candidate: T; position: number }> = []
   const seenKeys = new Set<string>()
   for (const { candidate, key } of sorted) {
     if (seenKeys.has(key)) continue
@@ -69,10 +71,10 @@ export function findNamesInText<T extends Named>(text: string, candidates: T[]):
     }
     if (position === -1) continue
     seenKeys.add(key)
-    found.push(candidate)
+    found.push({ candidate, position })
     haystack = haystack.slice(0, position) + '#'.repeat(key.length) + haystack.slice(position + key.length)
   }
-  return found
+  return found.sort((a, b) => a.position - b.position).map(({ candidate }) => candidate)
 }
 
 export interface ImportCatalog {
@@ -82,17 +84,38 @@ export interface ImportCatalog {
   mods: ModRecord[]
 }
 
-/** Ignora variantes internas (Beginner/Intermediate/Expert) que repetem o nome do mod. */
+/** Ignora variantes internas e, com nomes repetidos, fica a versão com mais ranques. */
 function playableMods(mods: ModRecord[]): ModRecord[] {
-  const internal = /\/(Beginner|Intermediate|Expert)\//
   const byName = new Map<string, ModRecord>()
-  for (const mod of mods) {
-    if (internal.test(mod.uniqueName)) continue
+  for (const mod of withoutInternalVariants(mods)) {
     const current = byName.get(mod.name)
-    // Com nomes repetidos, fica a versão com mais ranques (a actual).
     if (!current || mod.fusionLimit > current.fusionLimit) byName.set(mod.name, mod)
   }
   return [...byName.values()]
+}
+
+/** Mods que o item aceita (inclui Stance, Aura, mods de garras e Postura), para descartar falsos positivos. */
+function compatibleWith(item: DetectedItem, catalog: ImportCatalog, mods: ModRecord[]): ModRecord[] {
+  if (item.kind === 'arma') {
+    const weapon = catalog.weapons.find((entry) => entry.uniqueName === item.id)
+    if (!weapon) return mods
+    const allowed = new Set(filterModsForWeapon(catalog.mods, weapon).map((mod) => mod.uniqueName))
+    return mods.filter((mod) => allowed.has(mod.uniqueName) || (mod.type === 'Stance Mod' && weapon.category === 'Melee'))
+  }
+  if (item.kind === 'warframe') {
+    const frame = catalog.warframes.find((entry) => entry.uniqueName === item.id)
+    if (!frame) return mods
+    const allowed = new Set([
+      ...filterModsForWarframe(catalog.mods, frame),
+      ...filterModsForWarframe(catalog.mods, frame, 'aura'),
+    ].map((mod) => mod.uniqueName))
+    return mods.filter((mod) => allowed.has(mod.uniqueName) || isAuraMod(mod))
+  }
+  const companion = catalog.companions.find((entry) => entry.uniqueName === item.id)
+  if (!companion) return mods
+  const allowed = new Set(filterModsForCompanion(catalog.mods, companion.kind).map((mod) => mod.uniqueName))
+  return mods.filter((mod) => allowed.has(mod.uniqueName)
+    || (companion.kind === 'Beast' && (mod.type === 'Posture Mod' || mod.uniqueName.includes('/Sentinel/Kubrow/'))))
 }
 
 function kindFromMods(mods: ModRecord[]): DetectedKind | undefined {
@@ -124,5 +147,5 @@ export function detectBuildFromText(text: string, catalog: ImportCatalog): Image
   const item = itemMatches
     .sort((a, b) => Number(b.kind === modKind) - Number(a.kind === modKind) || b.name.length - a.name.length)[0]
 
-  return { item, mods }
+  return { item, mods: item ? compatibleWith(item, catalog, mods) : mods }
 }
