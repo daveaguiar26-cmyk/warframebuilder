@@ -65,7 +65,7 @@ export function CompanionView({ catalog, catalogLoading, onSave }: CompanionView
     ? encodeBuildCode({ v: 1, itens: toCompanionBuildItems({ companionId: companion.uniqueName, reactor, slots, weaponId }) })
     : ''
   const companionWeapons = useMemo(
-    () => catalog.weapons.filter((weapon) => weapon.type === companionWeaponType).sort((a, b) => a.name.localeCompare(b.name)),
+    () => catalog.weapons.filter((weapon) => weapon.type === companionWeaponType && !weapon.uniqueName.includes('/Friendly/Pets/')).sort((a, b) => a.name.localeCompare(b.name)),
     [catalog.weapons],
   )
   const weapon = companion?.kind === 'Sentinel' ? companionWeapons.find((entry) => entry.uniqueName === weaponId) : undefined
