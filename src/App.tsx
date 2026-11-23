@@ -125,7 +125,7 @@ export default function App() {
   const [catalog, setCatalog] = useState<CatalogData>(emptyCatalog)
   const [catalogLoading, setCatalogLoading] = useState(true)
   const [modPickerSlot, setModPickerSlot] = useState<number | null>(null)
-  const [view, setView] = useState<'warframes' | 'armas' | 'companheiros' | 'biblioteca'>('armas')
+  const [view, setView] = useState<'warframes' | 'armas' | 'companheiros' | 'biblioteca'>('warframes')
   const [library, setLibrary] = useState<{ entries: LibraryEntry[]; source: string } | null>(null)
   const [libraryError, setLibraryError] = useState('')
   const [libraryQuery, setLibraryQuery] = useState('')
