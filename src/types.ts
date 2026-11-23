@@ -66,6 +66,21 @@ export interface ArcaneRecord {
   levelStats?: Array<{ stats: string[] }>
 }
 
+export type CompanionKind = 'Sentinel' | 'Beast'
+
+export interface CompanionRecord {
+  uniqueName: string
+  name: string
+  kind: CompanionKind
+  imageName?: string
+  masteryReq?: number
+  /** Valores de ranque 30 (desde o Update 34 os dados já trazem os valores finais). */
+  health: number
+  shield: number
+  armor: number
+  polarities?: string[]
+}
+
 export interface CatalogData {
   generatedAt: string | null
   source: string
@@ -73,4 +88,5 @@ export interface CatalogData {
   mods: ModRecord[]
   warframes?: WarframeRecord[]
   arcanes?: ArcaneRecord[]
+  companions?: CompanionRecord[]
 }

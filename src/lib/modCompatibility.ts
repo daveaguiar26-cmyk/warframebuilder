@@ -65,3 +65,16 @@ export function filterModsForWarframe(mods: ModRecord[], frame: WarframeRecord, 
     return slot === 'exilus' ? mod.isExilus === true : true
   })
 }
+
+/**
+ * Mods de companheiro. Sentinelas não usam mods de bestas (/Sentinel/Kubrow/) nem preceitos de
+ * bestas (/Friendly/Pets/); bestas não usam preceitos de sentinela (/SentinelPrecepts/).
+ */
+export function filterModsForCompanion(mods: ModRecord[], kind: 'Sentinel' | 'Beast'): ModRecord[] {
+  return mods.filter((mod) => {
+    if (mod.type !== 'Companion Mod' || isInternalProgressionVariant(mod)) return false
+    const path = mod.uniqueName
+    if (kind === 'Sentinel') return !path.includes('/Sentinel/Kubrow/') && !path.includes('/Friendly/Pets/')
+    return !path.includes('/SentinelPrecepts/')
+  })
+}

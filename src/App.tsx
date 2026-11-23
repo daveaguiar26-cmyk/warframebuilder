@@ -31,6 +31,9 @@ import { useCatalogStore, type WeaponFilter } from './store/useCatalogStore'
 import { useWarframeStore } from './store/useWarframeStore'
 import { restoreWarframeBuild } from './lib/warframeBuild'
 import { WarframeView } from './views/WarframeView'
+import { CompanionView } from './views/CompanionView'
+import { useCompanionStore } from './store/useCompanionStore'
+import { restoreCompanionBuild } from './lib/companionBuild'
 import type { CatalogData, ModRecord, WeaponRecord } from './types'
 import { EmptyState, ItemImage, ModRow, Stat, formatNumber, formatPercent, matchesSlotPolarity, polarityOptions } from './ui/common'
 
@@ -108,7 +111,7 @@ export default function App() {
   const [catalog, setCatalog] = useState<CatalogData>(emptyCatalog)
   const [catalogLoading, setCatalogLoading] = useState(true)
   const [modPickerSlot, setModPickerSlot] = useState<number | null>(null)
-  const [view, setView] = useState<'warframes' | 'armas' | 'biblioteca'>('armas')
+  const [view, setView] = useState<'warframes' | 'armas' | 'companheiros' | 'biblioteca'>('armas')
   const [library, setLibrary] = useState<{ entries: LibraryEntry[]; source: string } | null>(null)
   const [libraryError, setLibraryError] = useState('')
   const [libraryQuery, setLibraryQuery] = useState('')
@@ -142,6 +145,7 @@ export default function App() {
     restoreBuild,
   } = useCatalogStore()
   const restoreWarframe = useWarframeStore((state) => state.restore)
+  const restoreCompanion = useCompanionStore((state) => state.restore)
 
   useEffect(() => {
     let cancelled = false
@@ -189,6 +193,7 @@ export default function App() {
     const weapon = firstItem
       ? catalog.weapons.find((item) => item.uniqueName === firstItem.id)
         ?? catalog.warframes?.find((item) => item.uniqueName === firstItem.id)
+        ?? catalog.companions?.find((item) => item.uniqueName === firstItem.id)
       : undefined
     return { entry, valid: decoded !== null, weapon }
   }
@@ -259,7 +264,7 @@ export default function App() {
   }
 
   /** Aplica o código e devolve a vista onde a build deve abrir. */
-  function applyBuildCode(code: string): 'armas' | 'warframes' {
+  function applyBuildCode(code: string): 'armas' | 'warframes' | 'companheiros' {
     const decoded = decodeBuildCode(code)
     const frameItem = decoded.itens.find((item) => item.tipo === 'warframe')
     if (frameItem) {
@@ -270,8 +275,13 @@ export default function App() {
       }))
       return 'warframes'
     }
+    const companionItem = decoded.itens.find((item) => item.tipo === 'companheiro')
+    if (companionItem) {
+      restoreCompanion(restoreCompanionBuild(companionItem, { companions: catalog.companions ?? [], mods: catalog.mods }))
+      return 'companheiros'
+    }
     const weaponItem = decoded.itens.find((item) => item.tipo === 'arma')
-    if (!weaponItem) throw new Error('O código não contém uma arma nem um Warframe.')
+    if (!weaponItem) throw new Error('O código não contém uma arma, um Warframe nem um companheiro.')
     if (weaponItem.rank > 30) throw new Error('O ranque da arma tem de estar entre 0 e 30.')
     if (weaponItem.slots.length !== 8) throw new Error('A build tem de conter exactamente oito slots.')
 
@@ -385,7 +395,7 @@ export default function App() {
         <nav className="main-nav" aria-label="Secções principais">
           <button type="button" className={`nav-item ${view === 'warframes' ? 'is-active' : ''}`} aria-current={view === 'warframes' ? 'page' : undefined} onClick={() => setView('warframes')}><Shield size={15} />Warframes</button>
           <button type="button" className={`nav-item ${view === 'armas' ? 'is-active' : ''}`} aria-current={view === 'armas' ? 'page' : undefined} onClick={() => setView('armas')}><Swords size={15} />Armas</button>
-          <button type="button" className="nav-item" disabled><Boxes size={15} />Companheiros<span className="nav-soon">BREVEMENTE</span></button>
+          <button type="button" className={`nav-item ${view === 'companheiros' ? 'is-active' : ''}`} aria-current={view === 'companheiros' ? 'page' : undefined} onClick={() => setView('companheiros')}><Boxes size={15} />Companheiros</button>
           <button type="button" className={`nav-item ${view === 'biblioteca' ? 'is-active' : ''}`} aria-current={view === 'biblioteca' ? 'page' : undefined} onClick={() => setView('biblioteca')}><Layers3 size={15} />Biblioteca</button>
         </nav>
 
@@ -406,6 +416,8 @@ export default function App() {
 
       {view === 'warframes' ? (
         <WarframeView catalog={catalog} catalogLoading={catalogLoading} onSave={saveCodeToLibrary} />
+      ) : view === 'companheiros' ? (
+        <CompanionView catalog={catalog} catalogLoading={catalogLoading} onSave={saveCodeToLibrary} />
       ) : view === 'armas' ? (<>
       <section className="page-heading" id="top">
         <div>

@@ -102,10 +102,13 @@ export function getEnergyCostMultiplier(efficiency: number): number {
   return Math.min(1.75, Math.max(0.25, 2 - efficiency))
 }
 
-export function calculateWarframeStats(
-  frame: WarframeRecord,
-  upgrades: RankedWarframeUpgrade[] = [],
-): WarframeStats {
+export interface UpgradeBonuses {
+  bonuses: Record<BonusKey, number>
+  ignoredEffects: string[]
+}
+
+/** Soma os bónus percentuais fixos de mods e arcanes (vida, escudo, armadura, energia e habilidades). */
+export function sumUpgradeBonuses(upgrades: RankedWarframeUpgrade[] = []): UpgradeBonuses {
   const bonuses: Record<BonusKey, number> = {
     health: 0, shield: 0, armor: 0, energy: 0, strength: 0, duration: 0, range: 0, efficiency: 0,
   }
@@ -118,7 +121,14 @@ export function calculateWarframeStats(
     }
     for (const stat of levels[rank]?.stats ?? []) applyStat(bonuses, ignoredEffects, stat)
   }
+  return { bonuses, ignoredEffects }
+}
 
+export function calculateWarframeStats(
+  frame: WarframeRecord,
+  upgrades: RankedWarframeUpgrade[] = [],
+): WarframeStats {
+  const { bonuses, ignoredEffects } = sumUpgradeBonuses(upgrades)
   const base = getRank30BaseStats(frame)
   const efficiency = 1 + bonuses.efficiency
   const rankStrength = getRankUpGain(frame).strength ?? 0

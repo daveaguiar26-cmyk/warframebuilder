@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ModRecord, WeaponRecord } from '../types'
-import { filterModsForWarframe, filterModsForWeapon } from './modCompatibility'
+import { filterModsForCompanion, filterModsForWarframe, filterModsForWeapon } from './modCompatibility'
 
 const rifle: WeaponRecord = {
   uniqueName: '/Lotus/Weapons/Tenno/LongGuns/Braton/Braton',
@@ -68,5 +68,19 @@ describe('filterModsForWarframe', () => {
   it('restricts aura and exilus slots', () => {
     expect(filterModsForWarframe(all, frame, 'aura').map((mod) => mod.name)).toEqual(['Corrosive Projection'])
     expect(filterModsForWarframe(all, frame, 'exilus').map((mod) => mod.name)).toEqual(['Power Drift'])
+  })
+})
+
+describe('filterModsForCompanion', () => {
+  const base = { baseDrain: 2, polarity: 'vazarin', fusionLimit: 10, type: 'Companion Mod' }
+  const vitality = { ...base, uniqueName: '/Lotus/Upgrades/Mods/Sentinel/SentinelHealthMaxMod', name: 'Enhanced Vitality' }
+  const precept = { ...base, uniqueName: '/Lotus/Types/Sentinels/SentinelPrecepts/PrimedRegen', name: 'Primed Regen' }
+  const beastMod = { ...base, uniqueName: '/Lotus/Upgrades/Mods/Sentinel/Kubrow/KubrowBiteMod', name: 'Bite' }
+  const petPrecept = { ...base, uniqueName: '/Lotus/Types/Friendly/Pets/KavatPrecepts/Charm', name: 'Charm' }
+  const all = [vitality, precept, beastMod, petPrecept]
+
+  it('separates sentinel and beast mods', () => {
+    expect(filterModsForCompanion(all, 'Sentinel').map((mod) => mod.name)).toEqual(['Enhanced Vitality', 'Primed Regen'])
+    expect(filterModsForCompanion(all, 'Beast').map((mod) => mod.name)).toEqual(['Enhanced Vitality', 'Bite', 'Charm'])
   })
 })

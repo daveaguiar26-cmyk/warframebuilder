@@ -5,12 +5,12 @@ import Items from '@wfcd/items'
 const outputPath = fileURLToPath(new URL('../public/data/catalog.json', import.meta.url))
 const excludedTags = new Set(['Amp', 'Kitgun', 'Zaw'])
 const itemCatalog = new Items({
-  category: ['Primary', 'Secondary', 'Melee', 'Mods', 'Warframes', 'Arcanes'],
+  category: ['Primary', 'Secondary', 'Melee', 'Mods', 'Warframes', 'Arcanes', 'Sentinels', 'Pets', 'SentinelWeapons'],
   resolveComponents: false,
 })
 
 const weapons = itemCatalog
-  .filter((item) => ['Primary', 'Secondary', 'Melee'].includes(item.category))
+  .filter((item) => ['Primary', 'Secondary', 'Melee'].includes(item.category) || item.productCategory === 'SentinelWeapons')
   .filter((item) => {
     const tags = item.tags ?? []
     return !excludedTags.has(item.type ?? '') && !tags.some((tag) => excludedTags.has(tag))
@@ -26,7 +26,7 @@ const weapons = itemCatalog
     damage: item.damage,
     criticalChance: item.criticalChance,
     criticalMultiplier: item.criticalMultiplier,
-    statusChance: item.statusChance,
+    statusChance: item.statusChance ?? item.procChance,
     multishot: item.multishot,
     fireRate: item.fireRate,
     magazineSize: item.magazineSize,
@@ -84,6 +84,21 @@ const arcanes = itemCatalog
     levelStats: item.levelStats,
   }))
 
+const companions = itemCatalog
+  .filter((item) => (item.category === 'Sentinels' && item.type === 'Sentinel')
+    || (item.category === 'Pets' && item.type === 'Pets' && typeof item.health === 'number'))
+  .map((item) => ({
+    uniqueName: item.uniqueName,
+    name: item.name,
+    kind: item.category === 'Sentinels' ? 'Sentinel' : 'Beast',
+    imageName: item.imageName,
+    masteryReq: item.masteryReq,
+    health: item.health,
+    shield: item.shield,
+    armor: item.armor,
+    polarities: item.polarities,
+  }))
+
 const catalog = {
   generatedAt: new Date().toISOString(),
   source: '@wfcd/items',
@@ -91,7 +106,8 @@ const catalog = {
   mods,
   warframes,
   arcanes,
+  companions,
 }
 
 await writeFile(outputPath, `${JSON.stringify(catalog, null, 2)}\n`)
-console.log(`Catálogo actualizado: ${weapons.length} armas, ${mods.length} mods, ${warframes.length} Warframes e ${arcanes.length} arcanes.`)
+console.log(`Catálogo actualizado: ${weapons.length} armas, ${mods.length} mods, ${warframes.length} Warframes, ${arcanes.length} arcanes e ${companions.length} companheiros.`)

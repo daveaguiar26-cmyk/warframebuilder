@@ -93,3 +93,29 @@ sessão. As divergências e aproximações estão assinaladas junto de cada regr
 	apenas mods com `isExilus` e custa capacidade como um slot normal.
 - Arcanes: só os efeitos percentuais fixos entram no cálculo. Os efeitos
 	condicionais ("On Damaged", etc.) aparecem como ignorados.
+
+## Companheiros (verificação: 23/11/2026)
+
+- Ranque fixo em 30, como nos Warframes. Desde o Update 34.0, os companheiros
+	recebem os valores de ranque 30 logo no ranque 0: "simply given Companions
+	what would end up being their Rank 30 values at Rank 0"
+	([Companion](https://wiki.warframe.com/w/Companion)). Os valores do catálogo
+	são usados directamente (ex.: [Carrier](https://wiki.warframe.com/w/Carrier)
+	560 / 250 / 80).
+- A wiki tem conflitos internos na armadura de algumas bestas (ex.:
+	[Adarza Kavat](https://wiki.warframe.com/w/Adarza_Kavat): a infobox diz 300 e
+	a nota do Update 34 diz 200). Usa-se o valor do catálogo `@wfcd/items`; falta
+	confirmar no jogo.
+- Mods de vida, escudo e armadura (Enhanced Vitality, Calculated Redirection,
+	Metal Fiber): `base * (1 + soma dos bónus)`. Preceitos, Link e efeitos
+	condicionais aparecem como ignorados.
+- Dez slots de mods, capacidade 30, ou 60 com Reactor. Falta confirmar no jogo o
+	número de slots.
+- Compatibilidade aproximada pelo caminho do mod: as sentinelas não usam mods de
+	bestas (`/Sentinel/Kubrow/`) nem preceitos de bestas (`/Friendly/Pets/`); as
+	bestas não usam preceitos de sentinela. Preceitos exclusivos de um
+	companheiro específico ainda não são filtrados.
+- Armas de sentinela: entram no separador Armas e são calculadas como armas. A
+	chance de estado vem de `procChance`. Os dados não indicam a classe da arma
+	(espingarda, caçadeira...), por isso a lista de mods compatíveis está
+	incompleta.
