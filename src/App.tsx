@@ -28,7 +28,11 @@ import { loadLibrary, saveBuildToSheet, type LibraryEntry } from './lib/library'
 import { filterModsForWeapon } from './lib/modCompatibility'
 import { searchItems } from './lib/search'
 import { useCatalogStore, type WeaponFilter } from './store/useCatalogStore'
+import { useWarframeStore } from './store/useWarframeStore'
+import { restoreWarframeBuild } from './lib/warframeBuild'
+import { WarframeView } from './views/WarframeView'
 import type { CatalogData, ModRecord, WeaponRecord } from './types'
+import { EmptyState, ItemImage, ModRow, Stat, formatNumber, formatPercent, matchesSlotPolarity, polarityOptions } from './ui/common'
 
 const emptyCatalog: CatalogData = {
   generatedAt: null,
@@ -50,17 +54,6 @@ const categoryNames: Record<string, string> = {
   Melee: 'Corpo a corpo',
 }
 
-const polarityOptions = [
-  ['none', 'Sem polaridade'],
-  ['madurai', 'Madurai'],
-  ['naramon', 'Naramon'],
-  ['vazarin', 'Vazarin'],
-  ['zenurik', 'Zenurik'],
-  ['unairu', 'Unairu'],
-  ['penjaga', 'Penjaga'],
-  ['umbra', 'Umbra'],
-  ['universal', 'Omni'],
-] as const
 
 const damageNames: Record<string, string> = {
   impact: 'Impacto',
@@ -98,36 +91,6 @@ const damageColors: Record<string, string> = {
   viral: '#d07ab4',
 }
 
-function matchesSlotPolarity(slotPolarity: string, modPolarity: string): boolean {
-  if (slotPolarity === 'universal' || slotPolarity === 'any') return modPolarity !== 'umbra'
-  return slotPolarity === modPolarity || modPolarity === 'any'
-}
-
-function imageUrl(imageName?: string): string | undefined {
-  return imageName ? `https://cdn.warframestat.us/img/${imageName.replace(/^\//, '')}` : undefined
-}
-
-function formatNumber(value?: number, fractionDigits = 2): string {
-  if (value === undefined || !Number.isFinite(value)) return '—'
-  return new Intl.NumberFormat('pt-PT', { maximumFractionDigits: fractionDigits }).format(value)
-}
-
-function formatPercent(value?: number): string {
-  return value === undefined ? '—' : `${formatNumber(value * 100)}%`
-}
-
-function ItemImage({ name, imageName, className = '' }: { name: string; imageName?: string; className?: string }) {
-  const source = imageUrl(imageName)
-  return (
-    <div className={`item-image ${className}`}>
-      {source ? (
-        <img src={source} alt="" loading="lazy" onError={(event) => event.currentTarget.remove()} />
-      ) : null}
-      <span aria-hidden="true">{name.slice(0, 1)}</span>
-    </div>
-  )
-}
-
 function WeaponRow({ weapon, active, onSelect }: { weapon: WeaponRecord; active: boolean; onSelect: () => void }) {
   return (
     <button className={`catalog-row weapon-row ${active ? 'is-selected' : ''}`} onClick={onSelect} type="button">
@@ -141,70 +104,11 @@ function WeaponRow({ weapon, active, onSelect }: { weapon: WeaponRecord; active:
   )
 }
 
-function ModRow({
-  mod,
-  active,
-  alreadyEquipped,
-  canEquip,
-  onSelect,
-  onEquip,
-}: {
-  mod: ModRecord
-  active: boolean
-  alreadyEquipped: boolean
-  canEquip: boolean
-  onSelect: () => void
-  onEquip: () => void
-}) {
-  return (
-    <div className={`catalog-row mod-row ${active ? 'is-selected' : ''}`}>
-      <button className="mod-row-select" onClick={onSelect} type="button" aria-pressed={active}>
-        <ItemImage name={mod.name} imageName={mod.imageName} />
-        <span className="row-copy">
-          <span className="row-title">{mod.name}</span>
-          <span className="row-meta">{mod.type ?? 'Mod'} · {mod.polarity}</span>
-        </span>
-        <span className="drain-tag">{mod.baseDrain}</span>
-      </button>
-      <button
-        className="mod-add-button"
-        onClick={onEquip}
-        type="button"
-        disabled={!canEquip || alreadyEquipped}
-        title={alreadyEquipped ? 'Este mod já está na build' : 'Adicionar à build'}
-        aria-label={`Adicionar ${mod.name} à build`}
-      >
-        {alreadyEquipped ? <span className="installed-mark">✓</span> : <Plus size={15} />}
-      </button>
-    </div>
-  )
-}
-
-function Stat({ icon: Icon, label, value }: { icon: typeof Activity; label: string; value: string }) {
-  return (
-    <div className="stat-cell">
-      <span className="stat-icon"><Icon size={15} strokeWidth={1.7} /></span>
-      <span className="stat-label">{label}</span>
-      <strong>{value}</strong>
-    </div>
-  )
-}
-
-function EmptyState({ title, detail }: { title: string; detail: string }) {
-  return (
-    <div className="empty-state">
-      <span className="empty-mark"><Database size={19} strokeWidth={1.5} /></span>
-      <strong>{title}</strong>
-      <p>{detail}</p>
-    </div>
-  )
-}
-
 export default function App() {
   const [catalog, setCatalog] = useState<CatalogData>(emptyCatalog)
   const [catalogLoading, setCatalogLoading] = useState(true)
   const [modPickerSlot, setModPickerSlot] = useState<number | null>(null)
-  const [view, setView] = useState<'armas' | 'biblioteca'>('armas')
+  const [view, setView] = useState<'warframes' | 'armas' | 'biblioteca'>('armas')
   const [library, setLibrary] = useState<{ entries: LibraryEntry[]; source: string } | null>(null)
   const [libraryError, setLibraryError] = useState('')
   const [libraryQuery, setLibraryQuery] = useState('')
@@ -237,6 +141,7 @@ export default function App() {
     setCatalyst,
     restoreBuild,
   } = useCatalogStore()
+  const restoreWarframe = useWarframeStore((state) => state.restore)
 
   useEffect(() => {
     let cancelled = false
@@ -280,8 +185,11 @@ export default function App() {
     } catch {
       decoded = null
     }
-    const weaponId = decoded?.itens.find((item) => item.tipo === 'arma')?.id
-    const weapon = weaponId ? catalog.weapons.find((item) => item.uniqueName === weaponId) : undefined
+    const firstItem = decoded?.itens[0]
+    const weapon = firstItem
+      ? catalog.weapons.find((item) => item.uniqueName === firstItem.id)
+        ?? catalog.warframes?.find((item) => item.uniqueName === firstItem.id)
+      : undefined
     return { entry, valid: decoded !== null, weapon }
   }
   const matchesLibraryQuery = ({ entry, weapon }: ReturnType<typeof describeEntry>) => {
@@ -350,10 +258,20 @@ export default function App() {
     }
   }
 
-  function applyBuildCode(code: string): void {
+  /** Aplica o código e devolve a vista onde a build deve abrir. */
+  function applyBuildCode(code: string): 'armas' | 'warframes' {
     const decoded = decodeBuildCode(code)
+    const frameItem = decoded.itens.find((item) => item.tipo === 'warframe')
+    if (frameItem) {
+      restoreWarframe(restoreWarframeBuild(frameItem, {
+        warframes: catalog.warframes ?? [],
+        mods: catalog.mods,
+        arcanes: catalog.arcanes ?? [],
+      }))
+      return 'warframes'
+    }
     const weaponItem = decoded.itens.find((item) => item.tipo === 'arma')
-    if (!weaponItem) throw new Error('O código não contém uma arma.')
+    if (!weaponItem) throw new Error('O código não contém uma arma nem um Warframe.')
     if (weaponItem.rank > 30) throw new Error('O ranque da arma tem de estar entre 0 e 30.')
     if (weaponItem.slots.length !== 8) throw new Error('A build tem de conter exactamente oito slots.')
 
@@ -381,12 +299,12 @@ export default function App() {
 
     restoreBuild(weapon.uniqueName, weaponItem.rank, weaponItem.catalyst, restoredSlots)
     selectMod(null)
+    return 'armas'
   }
 
   function importBuild(): void {
     try {
-      applyBuildCode(importCode)
-      setView('armas')
+      setView(applyBuildCode(importCode))
       setImportError('')
       setImportOpen(false)
       setImportCode('')
@@ -398,12 +316,16 @@ export default function App() {
 
   function openLibraryBuild(entry: LibraryEntry): void {
     try {
-      applyBuildCode(entry.codigo)
-      setView('armas')
+      setView(applyBuildCode(entry.codigo))
       setCodeFeedback(`Build "${entry.nome}" aberta`)
     } catch (error) {
       setLibraryFeedback(`${entry.nome}: ${error instanceof Error ? error.message : 'não foi possível abrir.'}`)
     }
+  }
+
+  async function saveCodeToLibrary(nome: string, code: string): Promise<void> {
+    await saveBuildToSheet(nome, code)
+    setLibrary(null)
   }
 
   async function saveCurrentBuild(): Promise<void> {
@@ -430,7 +352,7 @@ export default function App() {
           {weapon ? <ItemImage name={weapon.name} imageName={weapon.imageName} /> : <span className="item-image"><BookOpen size={16} /></span>}
           <div>
             <h2>{entry.nome || weapon?.name || 'Build sem nome'}</h2>
-            <span>{weapon?.name ?? (valid ? 'Arma fora do catálogo' : 'Código inválido')}{entry.autor ? ` · ${entry.autor}` : ''}</span>
+            <span>{weapon?.name ?? (valid ? 'Item fora do catálogo' : 'Código inválido')}{entry.autor ? ` · ${entry.autor}` : ''}</span>
           </div>
         </div>
         {entry.descricao && <p>{entry.descricao}</p>}
@@ -461,7 +383,7 @@ export default function App() {
         </a>
 
         <nav className="main-nav" aria-label="Secções principais">
-          <button type="button" className="nav-item" disabled><Shield size={15} />Warframes<span className="nav-soon">BREVEMENTE</span></button>
+          <button type="button" className={`nav-item ${view === 'warframes' ? 'is-active' : ''}`} aria-current={view === 'warframes' ? 'page' : undefined} onClick={() => setView('warframes')}><Shield size={15} />Warframes</button>
           <button type="button" className={`nav-item ${view === 'armas' ? 'is-active' : ''}`} aria-current={view === 'armas' ? 'page' : undefined} onClick={() => setView('armas')}><Swords size={15} />Armas</button>
           <button type="button" className="nav-item" disabled><Boxes size={15} />Companheiros<span className="nav-soon">BREVEMENTE</span></button>
           <button type="button" className={`nav-item ${view === 'biblioteca' ? 'is-active' : ''}`} aria-current={view === 'biblioteca' ? 'page' : undefined} onClick={() => setView('biblioteca')}><Layers3 size={15} />Biblioteca</button>
@@ -482,7 +404,9 @@ export default function App() {
         </div>
       </header>
 
-      {view === 'armas' ? (<>
+      {view === 'warframes' ? (
+        <WarframeView catalog={catalog} catalogLoading={catalogLoading} onSave={saveCodeToLibrary} />
+      ) : view === 'armas' ? (<>
       <section className="page-heading" id="top">
         <div>
           <div className="eyebrow"><span>01</span> / ARSENAL</div>
@@ -761,7 +685,7 @@ export default function App() {
             </label>
             {libraryFeedback && <small className="code-feedback" role="status">{libraryFeedback}</small>}
 
-            <div className="section-rule"><span>PARTILHADAS</span><span>{(library?.source ?? 'builds.json').toLocaleUpperCase('pt-PT')} · {libraryEntries.length}</span></div>
+            <div className="section-rule"><span>PARTILHADAS</span><span>{libraryEntries.length}</span></div>
             {libraryError ? (
               <EmptyState title="Biblioteca indisponível" detail={libraryError} />
             ) : !library ? (
@@ -847,7 +771,6 @@ export default function App() {
       <footer className="statusbar">
         <span><span className={`status-dot ${catalogLoading || isEmpty ? 'is-waiting' : ''}`} />CATÁLOGO {catalogLoading ? 'A CARREGAR' : isEmpty ? 'POR GERAR' : 'PRONTO'}</span>
         <span><Database size={13} />{catalog.source} <b>·</b> ficheiros estáticos</span>
-        <span className="status-right"><a href="https://wiki.warframe.com/w/Mod" target="_blank" rel="noreferrer">Wiki oficial <ArrowUpRight size={12} /></a></span>
       </footer>
     </main>
   )

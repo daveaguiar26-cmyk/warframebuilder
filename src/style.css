@@ -375,3 +375,18 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
   .statusbar { flex-wrap: wrap; gap: 8px 14px; padding: 10px 0; font-size: 11px; }
   .status-right { margin-left: auto; }
 }
+
+/* Warframe editor */
+.fixed-rank { display: block; color: var(--gold); font: 600 15px "JetBrains Mono", monospace; }
+.special-slot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 50%; }
+.arcane-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.arcane-slot { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--line); background: #0f151e; }
+.arcane-label { color: var(--muted); font: 11px "JetBrains Mono", monospace; letter-spacing: .08em; }
+.arcane-slot select { min-width: 0; flex: 1; }
+.arcane-effect { margin: 0; color: var(--text-soft); font-size: 12px; line-height: 1.45; }
+.ability-list { display: flex; flex-direction: column; gap: 8px; }
+.ability-card { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 12px; padding: 10px; border: 1px solid var(--line-soft); background: #0f151e; }
+.ability-card strong { color: var(--text); font-size: 14px; }
+.ability-card p { margin: 4px 0 8px; color: var(--text-soft); font-size: 12.5px; line-height: 1.45; }
+.ability-scaling { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--muted); font-size: 12px; }
+.ability-scaling b { color: var(--gold); font-family: "JetBrains Mono", monospace; font-weight: 500; }

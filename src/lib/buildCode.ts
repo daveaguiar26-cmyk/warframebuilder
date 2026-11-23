@@ -8,12 +8,20 @@ export interface BuildCodeSlot {
   rank: number
 }
 
+export interface BuildCodeArcane {
+  id: string | null
+  rank: number
+}
+
 export interface BuildCodeItem {
   tipo: string
   id: string
   rank: number
+  /** Catalyst nas armas, Reactor nos Warframes. */
   catalyst: boolean
   slots: BuildCodeSlot[]
+  /** Opcional: só Warframes. */
+  arcanos?: BuildCodeArcane[]
 }
 
 export interface BuildCodeV1 {
@@ -43,6 +51,14 @@ function isBuildCodeItem(value: unknown): value is BuildCodeItem {
     && typeof value.catalyst === 'boolean'
     && Array.isArray(value.slots)
     && value.slots.every(isBuildCodeSlot)
+    && (value.arcanos === undefined || (Array.isArray(value.arcanos) && value.arcanos.every(isBuildCodeArcane)))
+}
+
+function isBuildCodeArcane(value: unknown): value is BuildCodeArcane {
+  return isRecord(value)
+    && (typeof value.id === 'string' || value.id === null)
+    && Number.isInteger(value.rank)
+    && Number(value.rank) >= 0
 }
 
 function isBuildCodeV1(value: unknown): value is BuildCodeV1 {

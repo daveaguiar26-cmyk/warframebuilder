@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ModRecord, WeaponRecord } from '../types'
-import { filterModsForWeapon } from './modCompatibility'
+import { filterModsForWarframe, filterModsForWeapon } from './modCompatibility'
 
 const rifle: WeaponRecord = {
   uniqueName: '/Lotus/Weapons/Tenno/LongGuns/Braton/Braton',
@@ -43,5 +43,30 @@ describe('filterModsForWeapon', () => {
     const expert = mod('/Lotus/Upgrades/Mods/Rifle/Expert/WeaponDamageAmountModExpert')
 
     expect(filterModsForWeapon([normal, beginner, intermediate, expert], rifle)).toEqual([normal])
+  })
+})
+
+describe('filterModsForWarframe', () => {
+  const frame = {
+    uniqueName: '/Lotus/Powersuits/Cowgirl/Cowgirl',
+    name: 'Mesa', health: 365, shield: 180, armor: 105, power: 100, abilities: [],
+  }
+  const base = { baseDrain: 4, polarity: 'madurai', fusionLimit: 5, type: 'Warframe Mod' }
+  const intensify = { ...base, uniqueName: '/Lotus/Upgrades/Mods/Warframe/AvatarAbilityStrengthMod', name: 'Intensify' }
+  const beginner = { ...base, uniqueName: '/Lotus/Upgrades/Mods/Warframe/Beginner/AvatarAbilityStrengthModBeginner', name: 'Intensify' }
+  const aura = { ...base, uniqueName: '/Lotus/Upgrades/Mods/Aura/EnemyArmorReductionAuraMod', name: 'Corrosive Projection' }
+  const exilus = { ...base, uniqueName: '/Lotus/Upgrades/Mods/Warframe/PowerDrift', name: 'Power Drift', isExilus: true }
+  const ownAugment = { ...base, uniqueName: '/Lotus/Powersuits/Cowgirl/PeacemakerAugment', name: 'Mesa augment' }
+  const otherAugment = { ...base, uniqueName: '/Lotus/Powersuits/Excalibur/ExaltedAugment', name: 'Excalibur augment' }
+  const rifleMod = { ...base, uniqueName: '/Lotus/Upgrades/Mods/Rifle/Serration', name: 'Serration', type: 'Primary Mod' }
+  const all = [intensify, beginner, aura, exilus, ownAugment, otherAugment, rifleMod]
+
+  it('keeps general mods and own augments in normal slots', () => {
+    expect(filterModsForWarframe(all, frame).map((mod) => mod.name)).toEqual(['Intensify', 'Power Drift', 'Mesa augment'])
+  })
+
+  it('restricts aura and exilus slots', () => {
+    expect(filterModsForWarframe(all, frame, 'aura').map((mod) => mod.name)).toEqual(['Corrosive Projection'])
+    expect(filterModsForWarframe(all, frame, 'exilus').map((mod) => mod.name)).toEqual(['Power Drift'])
   })
 })

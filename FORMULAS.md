@@ -57,3 +57,35 @@ sessão. As divergências e aproximações estão assinaladas junto de cada regr
 - Só são calculados efeitos percentuais explícitos reconhecidos pelo motor.
 	Efeitos condicionais ou desconhecidos são devolvidos como ignorados e não
 	alteram os resultados.
+
+## Warframes (verificação: 23/11/2026)
+
+- Ranque fixo em 30 por decisão do utilizador. Os dados `@wfcd/items` trazem os
+	valores de ranque 0. No ranque 30 somam-se +100 de vida, +100 de escudo e +50
+	de energia: "For a total of +100 Health, +100 Shields and +50 Energy capacity
+	at Rank 30" ([Warframes](https://wiki.warframe.com/w/Warframes), secção
+	Leveling Up). A armadura não muda. Confirmado nas infoboxes de
+	[Mesa](https://wiki.warframe.com/w/Mesa) (365→465, 180→280, 100→150),
+	[Excalibur](https://wiki.warframe.com/w/Excalibur),
+	[Inaros](https://wiki.warframe.com/w/Inaros) e
+	[Nidus](https://wiki.warframe.com/w/Nidus). Um Warframe sem escudo continua
+	com 0. A wiki tem uma lista de "Rank-Up Exceptions" que ainda não está
+	modelada.
+- Os mods de vida, escudo, armadura e energia aplicam-se ao valor do ranque 30:
+	`base30 * (1 + soma dos bónus)` (mesma regra de
+	[Calculating Bonuses](https://wiki.warframe.com/w/Calculating_Bonuses)).
+- Força, Duração, Alcance e Eficiência: `100% + soma dos bónus`
+	([Ability Duration](https://wiki.warframe.com/w/Ability_Duration): "Final
+	Ability Duration = Base Ability Duration × Ability Duration bonus").
+- Custo de energia: `custo * max(200% − Eficiência, 25%)`, limitado também a
+	um máximo de 175% ([Ability Efficiency](https://wiki.warframe.com/w/Ability_Efficiency)).
+	As habilidades canalizadas não estão modeladas.
+- Força, Duração e Alcance não têm limites mínimos aplicados. A wiki consultada
+	não indica valores: falta confirmar.
+- Os valores concretos de cada habilidade (dano, segundos, metros, custo base)
+	não existem nos dados. Mostra-se o multiplicador que os mods aplicam a cada
+	habilidade (opção A). Os valores concretos ficam para o Nível 2, escritos à mão.
+- Aura: segue as regras de capacidade já descritas acima. O slot Exilus aceita
+	apenas mods com `isExilus` e custa capacidade como um slot normal.
+- Arcanes: só os efeitos percentuais fixos entram no cálculo. Os efeitos
+	condicionais ("On Damaged", etc.) aparecem como ignorados.

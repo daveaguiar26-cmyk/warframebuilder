@@ -1,4 +1,4 @@
-import type { ModRecord, WeaponRecord } from '../types'
+import type { ModRecord, WarframeRecord, WeaponRecord } from '../types'
 
 const internalProgressionTiers = new Set(['beginner', 'intermediate', 'expert'])
 const weaponTypeFolders = new Set([
@@ -40,4 +40,28 @@ function matchesWeaponType(weapon: WeaponRecord, mod: ModRecord): boolean {
 
 export function filterModsForWeapon(mods: ModRecord[], weapon: WeaponRecord): ModRecord[] {
   return mods.filter((mod) => !isInternalProgressionVariant(mod) && matchesWeaponType(weapon, mod))
+}
+
+export type WarframeSlotKind = 'normal' | 'aura' | 'exilus'
+
+function powersuitFolder(uniqueName: string): string | undefined {
+  const segments = uniqueName.split('/')
+  return segments[2] === 'Powersuits' ? segments[3] : undefined
+}
+
+export function isAuraMod(mod: ModRecord): boolean {
+  return mod.uniqueName.includes('/Mods/Aura/')
+}
+
+/** Mods de Warframe compatíveis: gerais ou augments do próprio Warframe (mesma pasta Powersuits). */
+export function filterModsForWarframe(mods: ModRecord[], frame: WarframeRecord, slot: WarframeSlotKind = 'normal'): ModRecord[] {
+  const frameFolder = powersuitFolder(frame.uniqueName)
+  return mods.filter((mod) => {
+    if (mod.type !== 'Warframe Mod' || isInternalProgressionVariant(mod)) return false
+    const modFolder = powersuitFolder(mod.uniqueName)
+    if (modFolder && modFolder !== frameFolder) return false
+    if (slot === 'aura') return isAuraMod(mod)
+    if (isAuraMod(mod)) return false
+    return slot === 'exilus' ? mod.isExilus === true : true
+  })
 }

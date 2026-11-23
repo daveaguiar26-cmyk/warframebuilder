@@ -33,9 +33,44 @@ export interface ModRecord {
   levelStats?: Array<{ stats: string[] }>
 }
 
+export interface AbilityRecord {
+  uniqueName: string
+  name: string
+  description?: string
+  imageName?: string
+}
+
+export interface WarframeRecord {
+  uniqueName: string
+  name: string
+  imageName?: string
+  masteryReq?: number
+  /** Valores de ranque 0, tal como vêm de @wfcd/items. */
+  health: number
+  shield: number
+  armor: number
+  power: number
+  sprintSpeed?: number
+  aura?: string
+  exilusPolarity?: string
+  polarities?: string[]
+  passiveDescription?: string
+  abilities: AbilityRecord[]
+}
+
+export interface ArcaneRecord {
+  uniqueName: string
+  name: string
+  imageName?: string
+  rarity?: string
+  levelStats?: Array<{ stats: string[] }>
+}
+
 export interface CatalogData {
   generatedAt: string | null
   source: string
   weapons: WeaponRecord[]
   mods: ModRecord[]
+  warframes?: WarframeRecord[]
+  arcanes?: ArcaneRecord[]
 }

@@ -38,3 +38,20 @@ describe('WFB1 build codes', () => {
     expect(() => compressedInvalid(invalidBuild)).toThrow()
   })
 })
+
+describe('WFB1 Warframe items', () => {
+  it('keeps optional arcanes through encode and decode', () => {
+    const build: BuildCodeV1 = {
+      v: 1,
+      itens: [{
+        tipo: 'warframe',
+        id: '/Lotus/Powersuits/Cowgirl/Cowgirl',
+        rank: 30,
+        catalyst: true,
+        slots: [{ polarity: 'madurai', modId: null, rank: 0 }],
+        arcanos: [{ id: '/Lotus/Upgrades/CosmeticEnhancers/Defensive/SpeedOnDamage', rank: 5 }, { id: null, rank: 0 }],
+      }],
+    }
+    expect(decodeBuildCode(encodeBuildCode(build))).toEqual(build)
+  })
+})
