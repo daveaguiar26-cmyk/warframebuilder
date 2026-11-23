@@ -87,3 +87,19 @@ export function filterModsForCompanion(mods: ModRecord[], kind: 'Sentinel' | 'Be
     return owner === undefined || preceptFolders[kind].includes(owner)
   })
 }
+
+/** Mods para armas de companheiro, segundo a classe registada à mão (ver companionData.ts). */
+export function filterModsForCompanionWeapon(
+  mods: ModRecord[],
+  weapon: WeaponRecord,
+  weaponClass: { category: WeaponRecord['category']; modTypes: string[] } | undefined,
+): ModRecord[] {
+  if (!weaponClass) return []
+  const unique = new Map<string, ModRecord>()
+  for (const modType of weaponClass.modTypes) {
+    for (const mod of filterModsForWeapon(mods, { ...weapon, type: modType, category: weaponClass.category })) {
+      unique.set(mod.uniqueName, mod)
+    }
+  }
+  return [...unique.values()]
+}

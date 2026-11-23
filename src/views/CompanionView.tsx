@@ -3,13 +3,22 @@ import { Activity, ArrowUpRight, Copy, Crosshair, Heart, Layers3, Plus, Save, Se
 import { calculateCapacity, getRankedDrain, getSlotDrain } from '../engine/capacity'
 import { calculateCompanionStats } from '../engine/companion'
 import { calculateWeaponStats } from '../engine/weapon'
-import type { ModSlot } from '../engine/types'
+import type { ModSlot, RankedWeaponMod } from '../engine/types'
 import { encodeBuildCode } from '../lib/buildCode'
-import { canChooseWeapon, companionRank, getCompanionWeapon, getRoboticWeapons, toCompanionBuildItems } from '../lib/companionBuild'
+import {
+  canChooseWeapon,
+  companionRank,
+  filterModsForCompanionWeaponRecord,
+  getCompanionWeapon,
+  getRoboticWeapons,
+  hasWeaponMods,
+  toCompanionBuildItems,
+} from '../lib/companionBuild'
 import { modularCompanions, partLabels, partOptions, type PartOption } from '../data/companionData'
 import { filterModsForCompanion } from '../lib/modCompatibility'
 import { searchItems } from '../lib/search'
-import { useCompanionStore } from '../store/useCompanionStore'
+import { useCompanionStore, type SlotTarget } from '../store/useCompanionStore'
+import type { BuildModSlot } from '../store/useCatalogStore'
 import type { CatalogData, CompanionRecord } from '../types'
 import { EmptyState, ItemImage, ModRow, Stat, formatNumber, formatPercent, matchesSlotPolarity, polarityOptions } from '../ui/common'
 
@@ -50,10 +59,10 @@ function CompanionRow({ companion, active, onSelect }: { companion: CompanionRec
 export function CompanionView({ catalog, catalogLoading, onSave }: CompanionViewProps) {
   const companions = useMemo(() => [...(catalog.companions ?? []), ...modularCompanions], [catalog.companions])
   const {
-    query, companionId, reactor, slots, weaponId, parts,
-    setQuery, setWeapon, setPart, selectCompanion, equipMod, removeMod, setModRank, setSlotPolarity, setReactor,
+    query, companionId, reactor, slots, weaponId, parts, weaponSlots, weaponCatalyst,
+    setQuery, setWeapon, setPart, selectCompanion, equipMod, removeMod, setModRank, setSlotPolarity, setReactor, setWeaponCatalyst,
   } = useCompanionStore()
-  const [pickerSlot, setPickerSlot] = useState<number | null>(null)
+  const [picker, setPicker] = useState<{ target: SlotTarget; index: number } | null>(null)
   const [modQuery, setModQuery] = useState('')
   const [saveName, setSaveName] = useState('')
   const [saving, setSaving] = useState(false)
@@ -62,29 +71,49 @@ export function CompanionView({ catalog, catalogLoading, onSave }: CompanionView
   const visible = useMemo(() => searchItems(companions, query), [companions, query])
   const companion = companions.find((entry) => entry.uniqueName === companionId)
   const modsById = useMemo(() => new Map(catalog.mods.map((mod) => [mod.uniqueName, mod])), [catalog.mods])
-  const modSlots = useMemo<ModSlot[]>(() => slots.map((slot, index) => ({
+  const toModSlots = (entries: BuildModSlot[]): ModSlot[] => entries.map((slot, index) => ({
     index,
     polarity: slot.polarity,
     factoryPolarity: slot.factoryPolarity,
     kind: 'normal',
     mod: slot.modId ? modsById.get(slot.modId) : undefined,
     rank: slot.rank,
-  })), [slots, modsById])
+  }))
+  const modSlots = useMemo(() => toModSlots(slots), [slots, modsById])
+  const weaponModSlots = useMemo(() => toModSlots(weaponSlots), [weaponSlots, modsById])
+  const rankedMods = (entries: ModSlot[]): RankedWeaponMod[] =>
+    entries.flatMap((slot) => slot.mod ? [{ slotIndex: slot.index, mod: slot.mod, rank: slot.rank ?? 0 }] : [])
 
   const stats = useMemo(() => companion
     ? calculateCompanionStats(companion, modSlots.flatMap((slot) => slot.mod ? [{ upgrade: slot.mod, rank: slot.rank ?? 0 }] : []), parts)
     : null, [companion, modSlots, parts])
   const capacity = calculateCapacity({ rank: companionRank, catalyst: reactor, slots: modSlots })
-  const buildCode = companion
-    ? encodeBuildCode({ v: 1, itens: toCompanionBuildItems({ companionId: companion.uniqueName, reactor, slots, weaponId, parts }) })
-    : ''
   const roboticWeapons = useMemo(() => getRoboticWeapons(catalog.weapons), [catalog.weapons])
   const weapon = companion ? getCompanionWeapon(companion, { weaponId, parts }, catalog.weapons) : undefined
-  const weaponStats = useMemo(() => weapon ? calculateWeaponStats({ weapon }) : null, [weapon])
-  const pickerMods = useMemo(
-    () => companion && pickerSlot !== null ? searchItems(filterModsForCompanion(catalog.mods, companion.kind), modQuery) : [],
-    [catalog.mods, companion, pickerSlot, modQuery],
-  )
+  const weaponModdable = hasWeaponMods(weapon)
+  const buildCode = companion
+    ? encodeBuildCode({ v: 1, itens: toCompanionBuildItems({ companionId: companion.uniqueName, reactor, slots, weaponId, parts, weaponSlots, weaponCatalyst }, weapon) })
+    : ''
+  // Garras de bestas: os mods do companheiro (Bite, Maul...) aplicam-se às garras.
+  const weaponStats = useMemo(() => {
+    if (!weapon) return null
+    return calculateWeaponStats({ weapon, mods: rankedMods(weaponModdable ? weaponModSlots : modSlots) })
+  }, [weapon, weaponModdable, weaponModSlots, modSlots])
+  const weaponCapacity = calculateCapacity({ rank: companionRank, catalyst: weaponCatalyst, slots: weaponModSlots })
+  const pickerMods = useMemo(() => {
+    if (!companion || !picker) return []
+    const compatible = picker.target === 'weapon'
+      ? (weapon ? filterModsForCompanionWeaponRecord(catalog.mods, weapon) : [])
+      : filterModsForCompanion(catalog.mods, companion.kind)
+    return searchItems(compatible, modQuery)
+  }, [catalog.mods, companion, picker, weapon, modQuery])
+
+  function changePart(target: CompanionRecord, slot: string, value: string): void {
+    setPart(target, slot, value)
+    if (target.kind === 'Hound' && slot === 'modelo') {
+      setWeapon(getCompanionWeapon(target, { weaponId: null, parts: { ...parts, modelo: value } }, catalog.weapons) ?? null, false)
+    }
+  }
 
   async function save(): Promise<void> {
     const nome = saveName.trim()
@@ -111,14 +140,14 @@ export function CompanionView({ catalog, catalogLoading, onSave }: CompanionView
     }
   }
 
-  function renderSlot(slot: ModSlot) {
+  function renderSlot(slot: ModSlot, target: SlotTarget) {
     const { mod, index } = slot
     const polarityMatch = mod && slot.polarity !== 'none' ? matchesSlotPolarity(slot.polarity ?? 'none', mod.polarity) : null
     const matchClass = polarityMatch === null ? '' : polarityMatch ? 'is-matching' : 'is-mismatched'
     const rankedDrain = mod ? getRankedDrain(mod, slot.rank ?? 0) : 0
     const slotCost = mod ? getSlotDrain(slot) : 0
     const polaritySelect = (
-      <select value={slot.polarity ?? 'none'} onChange={(event) => setSlotPolarity(index, event.target.value)} aria-label={`Polaridade do slot ${index + 1}`}>
+      <select value={slot.polarity ?? 'none'} onChange={(event) => setSlotPolarity(target, index, event.target.value)} aria-label={`Polaridade do slot ${index + 1}`}>
         {polarityOptions.map(([value, name]) => <option key={value} value={value}>{name}</option>)}
       </select>
     )
@@ -126,14 +155,14 @@ export function CompanionView({ catalog, catalogLoading, onSave }: CompanionView
       <div className={`build-slot ${mod ? 'has-mod' : 'is-empty'} ${matchClass}`} key={index}>
         <div className="build-slot-head">
           <span>SLOT {String(index + 1).padStart(2, '0')}</span>
-          {mod && <button className="slot-remove-button" type="button" onClick={() => removeMod(index)} aria-label={`Remover ${mod.name}`}><Trash2 size={12} /></button>}
+          {mod && <button className="slot-remove-button" type="button" onClick={() => removeMod(target, index)} aria-label={`Remover ${mod.name}`}><Trash2 size={12} /></button>}
         </div>
         {mod ? (
           <>
             <ItemImage name={mod.name} imageName={mod.imageName} className="slot-image" />
             <strong className="slot-mod-name" title={mod.name}>{mod.name}</strong>
             <div className="slot-controls">
-              <select value={slot.rank ?? 0} onChange={(event) => setModRank(index, Number(event.target.value))} aria-label={`Ranque de ${mod.name}`}>
+              <select value={slot.rank ?? 0} onChange={(event) => setModRank(target, index, Number(event.target.value))} aria-label={`Ranque de ${mod.name}`}>
                 {Array.from({ length: mod.fusionLimit + 1 }, (_, rank) => <option key={rank} value={rank}>R{rank}</option>)}
               </select>
               {polaritySelect}
@@ -142,7 +171,7 @@ export function CompanionView({ catalog, catalogLoading, onSave }: CompanionView
           </>
         ) : (
           <>
-            <button className="empty-slot-add" type="button" onClick={() => { setModQuery(''); setPickerSlot(index) }} aria-label={`Adicionar mod ao slot ${index + 1}`}>
+            <button className="empty-slot-add" type="button" onClick={() => { setModQuery(''); setPicker({ target, index }) }} aria-label={`Adicionar mod ao slot ${index + 1}`}>
               <Plus size={16} /><span>Adicionar mod</span>
             </button>
             {polaritySelect}
@@ -224,7 +253,7 @@ export function CompanionView({ catalog, catalogLoading, onSave }: CompanionView
               </div>
 
               <div className="section-rule build-section-heading"><span>MODS DA BUILD</span><span>{modSlots.filter((slot) => slot.mod).length} / {modSlots.length}</span></div>
-              <div className="build-slot-grid">{modSlots.map(renderSlot)}</div>
+              <div className="build-slot-grid">{modSlots.map((slot) => renderSlot(slot, 'companion'))}</div>
 
               {(companion.kind === 'MOA' || companion.kind === 'Hound') && (
                 <>
@@ -233,7 +262,7 @@ export function CompanionView({ catalog, catalogLoading, onSave }: CompanionView
                     {Object.entries(partOptions[companion.kind]).map(([slot, options]) => (
                       <label className="arcane-slot" key={slot}>
                         <span className="arcane-label">{partLabels[slot].toLocaleUpperCase('pt-PT')}</span>
-                        <select value={parts[slot] ?? ''} onChange={(event) => setPart(companion, slot, event.target.value)} aria-label={partLabels[slot]}>
+                        <select value={parts[slot] ?? ''} onChange={(event) => changePart(companion, slot, event.target.value)} aria-label={partLabels[slot]}>
                           {options.map((option) => <option key={option.name} value={option.name}>{describePart(option)}</option>)}
                         </select>
                       </label>
@@ -245,7 +274,7 @@ export function CompanionView({ catalog, catalogLoading, onSave }: CompanionView
               <div className="section-rule lower-rule"><span>ARMA</span><span>{canChooseWeapon(companion) ? 'ARMA ROBÓTICA' : companion.kind === 'Hound' ? 'DEFINIDA PELO MODELO' : 'GARRAS'}</span></div>
               <div className="arcane-slot">
                 {canChooseWeapon(companion) ? (
-                  <select value={weaponId ?? ''} onChange={(event) => setWeapon(event.target.value || null)} aria-label="Arma do companheiro">
+                  <select value={weaponId ?? ''} onChange={(event) => setWeapon(roboticWeapons.find((entry) => entry.uniqueName === event.target.value) ?? null, true)} aria-label="Arma do companheiro">
                     <option value="">Sem arma</option>
                     {roboticWeapons.map((entry) => <option key={entry.uniqueName} value={entry.uniqueName}>{entry.name}</option>)}
                   </select>
@@ -264,7 +293,25 @@ export function CompanionView({ catalog, catalogLoading, onSave }: CompanionView
                   </div>
                 )}
                 {weapon && !weapon.fireRate && <p className="arcane-effect">A wiki não indica a velocidade de ataque destas garras, por isso não há DPS de referência.</p>}
+                {weapon && !weaponModdable && <p className="arcane-effect">As garras usam os mods do companheiro (Bite, Maul...), já aplicados acima.</p>}
               </div>
+
+              {weapon && weaponModdable && (
+                <>
+                  <div className="section-rule lower-rule">
+                    <span>MODS DA ARMA</span>
+                    <span>{weaponCapacity.usedCapacity} / {weaponCapacity.totalCapacity} · FORMAS {weaponCapacity.formaRequired}</span>
+                  </div>
+                  <label className="catalyst-toggle">
+                    <input type="checkbox" checked={weaponCatalyst} onChange={(event) => setWeaponCatalyst(event.target.checked)} />
+                    <span>Catalyst</span>
+                  </label>
+                  <div className="build-slot-grid">{weaponModSlots.map((slot) => renderSlot(slot, 'weapon'))}</div>
+                  {weaponStats?.ignoredEffects.length ? (
+                    <p className="raw-data-note">Efeitos da arma fora do cálculo: {weaponStats.ignoredEffects.join(' · ')}</p>
+                  ) : null}
+                </>
+              )}
 
               <div className="build-code-section">
                 <div className="section-rule"><span>GUARDAR BUILD</span><span>BIBLIOTECA</span></div>
@@ -305,12 +352,12 @@ export function CompanionView({ catalog, catalogLoading, onSave }: CompanionView
         </aside>
       </section>
 
-      {pickerSlot !== null && companion && (
-        <div className="picker-backdrop" onClick={(event) => event.target === event.currentTarget && setPickerSlot(null)}>
+      {picker && companion && (
+        <div className="picker-backdrop" onClick={(event) => event.target === event.currentTarget && setPicker(null)}>
           <section className="mod-picker" role="dialog" aria-modal="true" aria-labelledby="companion-mod-picker-title">
             <header className="picker-header">
-              <div><span className="eyebrow">{companion.name.toLocaleUpperCase('pt-PT')} · SLOT {pickerSlot + 1}</span><h2 id="companion-mod-picker-title">Adicionar mod</h2></div>
-              <button type="button" className="picker-close" onClick={() => setPickerSlot(null)} aria-label="Fechar selector de mods"><X size={18} /></button>
+              <div><span className="eyebrow">{(picker.target === 'weapon' && weapon ? weapon.name : companion.name).toLocaleUpperCase('pt-PT')} · SLOT {picker.index + 1}</span><h2 id="companion-mod-picker-title">Adicionar mod</h2></div>
+              <button type="button" className="picker-close" onClick={() => setPicker(null)} aria-label="Fechar selector de mods"><X size={18} /></button>
             </header>
             <label className="search-box picker-search">
               <Search size={16} aria-hidden="true" />
@@ -323,10 +370,10 @@ export function CompanionView({ catalog, catalogLoading, onSave }: CompanionView
                   key={mod.uniqueName}
                   mod={mod}
                   active={false}
-                  alreadyEquipped={slots.some((slot) => slot.modId === mod.uniqueName)}
+                  alreadyEquipped={(picker.target === 'weapon' ? weaponSlots : slots).some((slot) => slot.modId === mod.uniqueName)}
                   canEquip
                   onSelect={() => undefined}
-                  onEquip={() => { if (equipMod(pickerSlot, mod.uniqueName)) setPickerSlot(null) }}
+                  onEquip={() => { if (equipMod(picker.target, picker.index, mod.uniqueName)) setPicker(null) }}
                 />
               )) : <EmptyState title="Sem resultados" detail="Tente outro nome ou efeito de mod." />}
             </div>

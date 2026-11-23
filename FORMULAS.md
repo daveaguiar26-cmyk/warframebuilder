@@ -128,8 +128,20 @@ sessão. As divergências e aproximações estão assinaladas junto de cada regr
 		indica a velocidade de ataque, por isso não há DPS de referência. Na
 		Pharaoh Predasite, a tabela diz 324 e as notas do Update 37 dizem 325;
 		usa-se a tabela.
-	- As armas vão no mesmo código (item `arma-companheiro`) e são calculadas
-		como armas, sem mods por agora: os dados não indicam a classe da arma.
+	- Mods das armas robóticas e de Hound: tabela em `companionWeaponClasses`,
+		a partir da frase de cada página da wiki ("This weapon accepts Rifle Mods",
+		ex.: [Laser Rifle](https://wiki.warframe.com/w/Laser_Rifle)). Sweeper usa
+		mods de caçadeira, Burst Laser de pistola, Vulklok de espingarda e sniper,
+		Deconstructor de corpo a corpo, e as restantes de espingarda. Akaten,
+		Batoten e Lacerten são "Melee" nos dados da página, mas a wiki não tem a
+		frase; assumiu-se corpo a corpo. As variantes Prime/Prisma usam a classe
+		da base. Assumiram-se 8 slots, capacidade 30 e Catalyst, como nas outras
+		armas; falta confirmar.
+	- Garras de bestas: não têm slots próprios. Os mods de garras (Bite, Maul...)
+		são mods do companheiro ([Claws (Beast)](https://wiki.warframe.com/w/Claws_(Beast)))
+		e os efeitos percentuais reconhecidos entram no cálculo das garras.
+	- A arma vai no mesmo código (item `arma-companheiro`, com slots e Catalyst)
+		e é calculada pelo motor das armas.
 - MOA ([MOA (Companion)](https://wiki.warframe.com/w/MOA_(Companion))): base
 	350 / 350 / 350; o núcleo e o giroscópio somam percentagens. Usam-se as
 	tabelas-resumo da página, que valem o dobro da lista: com elas o total dá

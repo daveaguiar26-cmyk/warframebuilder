@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ModRecord, WeaponRecord } from '../types'
-import { filterModsForCompanion, filterModsForWarframe, filterModsForWeapon } from './modCompatibility'
+import { filterModsForCompanion, filterModsForCompanionWeapon, filterModsForWarframe, filterModsForWeapon } from './modCompatibility'
 
 const rifle: WeaponRecord = {
   uniqueName: '/Lotus/Weapons/Tenno/LongGuns/Braton/Braton',
@@ -86,5 +86,24 @@ describe('filterModsForCompanion', () => {
     expect(filterModsForCompanion(all, 'Beast').map((mod) => mod.name)).toEqual(['Enhanced Vitality', 'Bite', 'Charm'])
     expect(filterModsForCompanion(all, 'MOA').map((mod) => mod.name)).toEqual(['Enhanced Vitality', 'Anti-Grav Grenade'])
     expect(filterModsForCompanion(all, 'Hound').map((mod) => mod.name)).toEqual(['Enhanced Vitality', 'Null Audit'])
+  })
+})
+
+describe('filterModsForCompanionWeapon', () => {
+  const base = { baseDrain: 4, polarity: 'madurai', fusionLimit: 10 }
+  const serration = { ...base, uniqueName: '/Lotus/Upgrades/Mods/Rifle/WeaponDamageAmountMod', name: 'Serration', type: 'Primary Mod' }
+  const pointBlank = { ...base, uniqueName: '/Lotus/Upgrades/Mods/Shotgun/WeaponDamageAmountMod', name: 'Point Blank', type: 'Shotgun Mod' }
+  const pressure = { ...base, uniqueName: '/Lotus/Upgrades/Mods/Melee/WeaponMeleeDamageMod', name: 'Pressure Point', type: 'Melee Mod' }
+  const laser = { uniqueName: '/laser', name: 'Laser Rifle', category: 'Primary' as const, type: 'Companion Weapon' }
+  const all = [serration, pointBlank, pressure]
+
+  it('uses the weapon class to pick rifle, shotgun or melee mods', () => {
+    expect(filterModsForCompanionWeapon(all, laser, { category: 'Primary', modTypes: ['Rifle'] }).map((mod) => mod.name)).toEqual(['Serration'])
+    expect(filterModsForCompanionWeapon(all, laser, { category: 'Primary', modTypes: ['Shotgun'] }).map((mod) => mod.name)).toEqual(['Point Blank'])
+    expect(filterModsForCompanionWeapon(all, laser, { category: 'Melee', modTypes: ['Melee'] }).map((mod) => mod.name)).toEqual(['Pressure Point'])
+  })
+
+  it('returns nothing for weapons without a known class', () => {
+    expect(filterModsForCompanionWeapon(all, laser, undefined)).toEqual([])
   })
 })

@@ -1,12 +1,13 @@
 import { companionWeaponType, type CompanionRecord, type ModRecord, type WeaponRecord } from '../types'
 import type { BuildModSlot } from '../store/useCatalogStore'
 import type { BuildCodeItem } from './buildCode'
-import { filterModsForCompanion } from './modCompatibility'
+import { filterModsForCompanion, filterModsForCompanionWeapon } from './modCompatibility'
 import { knownPolarities } from './warframeBuild'
 import {
   beastClaws,
   defaultParts,
   getCompanionPolarities,
+  getCompanionWeaponClass,
   houndModels,
   houndWeaponNames,
   isValidParts,
@@ -15,6 +16,8 @@ import {
 
 export const companionRank = 30
 export const companionSlotCount = 10
+/** Slots de mods da arma (como as restantes armas; número por confirmar na wiki). */
+export const companionWeaponSlotCount = 8
 
 export interface CompanionBuildState {
   companionId: string
@@ -24,6 +27,25 @@ export interface CompanionBuildState {
   weaponId: string | null
   /** Peças de MOA/Hound. */
   parts: CompanionParts
+  /** Mods da arma robótica ou de Hound (as garras das bestas usam os mods do companheiro). */
+  weaponSlots: BuildModSlot[]
+  weaponCatalyst: boolean
+}
+
+export function createWeaponSlots(weapon?: WeaponRecord): BuildModSlot[] {
+  return Array.from({ length: companionWeaponSlotCount }, (_, index) => {
+    const factoryPolarity = weapon?.polarities?.[index] ?? 'none'
+    return { modId: null, rank: 0, polarity: factoryPolarity, factoryPolarity }
+  })
+}
+
+/** A arma aceita mods próprios? (garras de bestas não: usam os mods do companheiro). */
+export function hasWeaponMods(weapon: WeaponRecord | undefined): boolean {
+  return weapon !== undefined && weapon.type !== 'Beast Claws' && getCompanionWeaponClass(weapon.name) !== undefined
+}
+
+export function filterModsForCompanionWeaponRecord(mods: ModRecord[], weapon: WeaponRecord): ModRecord[] {
+  return filterModsForCompanionWeapon(mods, weapon, getCompanionWeaponClass(weapon.name))
 }
 
 /** Sentinelas e MOA escolhem entre as armas robóticas (todas as de companheiro excepto as de Hound). */
@@ -60,10 +82,18 @@ export function createCompanionSlots(companion?: CompanionRecord, parts: Compani
   })
 }
 
-/** Itens do código: o companheiro e, se existir, a arma da sentinela. */
-export function toCompanionBuildItems(state: CompanionBuildState): BuildCodeItem[] {
+/** Itens do código: o companheiro e, se aceitar mods, a arma (escolhida ou fixa). */
+export function toCompanionBuildItems(state: CompanionBuildState, weapon?: WeaponRecord): BuildCodeItem[] {
   const items = [toCompanionBuildItem(state)]
-  if (state.weaponId) items.push({ tipo: companionWeaponItemType, id: state.weaponId, rank: companionRank, catalyst: false, slots: [] })
+  if (weapon && hasWeaponMods(weapon)) {
+    items.push({
+      tipo: companionWeaponItemType,
+      id: weapon.uniqueName,
+      rank: companionRank,
+      catalyst: state.weaponCatalyst,
+      slots: state.weaponSlots.map(({ polarity, modId, rank }) => ({ polarity, modId, rank })),
+    })
+  }
   return items
 }
 
@@ -107,12 +137,34 @@ export function restoreCompanionBuild(
 
   const weaponItem = allItems.find((entry) => entry.tipo === companionWeaponItemType)
   let weaponId: string | null = null
+  let weaponSlots = createWeaponSlots()
+  let weaponCatalyst = false
   if (weaponItem) {
-    if (!canChooseWeapon(companion)) throw new Error('Este companheiro tem arma fixa.')
-    const weapon = getRoboticWeapons(catalog.weapons ?? []).find((entry) => entry.uniqueName === weaponItem.id)
-    if (!weapon) throw new Error('A arma do companheiro não existe no catálogo local.')
-    weaponId = weapon.uniqueName
+    const weapon = canChooseWeapon(companion)
+      ? getRoboticWeapons(catalog.weapons ?? []).find((entry) => entry.uniqueName === weaponItem.id)
+      : getCompanionWeapon(companion, { weaponId: null, parts }, catalog.weapons ?? [])
+    if (!weapon || weapon.uniqueName !== weaponItem.id) throw new Error('A arma do companheiro não existe ou não corresponde ao companheiro.')
+    if (canChooseWeapon(companion)) weaponId = weapon.uniqueName
+    weaponCatalyst = weaponItem.catalyst
+    weaponSlots = restoreWeaponSlots(weaponItem, weapon, modsById)
   }
 
-  return { companionId: companion.uniqueName, reactor: item.catalyst, slots, weaponId, parts }
+  return { companionId: companion.uniqueName, reactor: item.catalyst, slots, weaponId, parts, weaponSlots, weaponCatalyst }
+}
+
+function restoreWeaponSlots(item: BuildCodeItem, weapon: WeaponRecord, modsById: Map<string, ModRecord>): BuildModSlot[] {
+  if (item.slots.length === 0) return createWeaponSlots(weapon)
+  if (item.slots.length !== companionWeaponSlotCount) throw new Error('A arma do companheiro tem de conter oito slots.')
+  const usedModIds = item.slots.flatMap((slot) => slot.modId ? [slot.modId] : [])
+  if (new Set(usedModIds).size !== usedModIds.length) throw new Error('A arma contém o mesmo mod mais do que uma vez.')
+  return item.slots.map((slot, index) => {
+    if (!knownPolarities.has(slot.polarity)) throw new Error(`A polaridade do slot ${index + 1} da arma não é reconhecida.`)
+    const mod = slot.modId ? modsById.get(slot.modId) : undefined
+    if (slot.modId && !mod) throw new Error(`O mod do slot ${index + 1} da arma não existe no catálogo local.`)
+    if (mod && slot.rank > mod.fusionLimit) throw new Error(`O rank do mod ${mod.name} excede o máximo.`)
+    if (mod && filterModsForCompanionWeaponRecord([mod], weapon).length === 0) {
+      throw new Error(`O mod ${mod.name} não pode ser usado em ${weapon.name}.`)
+    }
+    return { modId: slot.modId, rank: slot.rank, polarity: slot.polarity, factoryPolarity: weapon.polarities?.[index] ?? 'none' }
+  })
 }

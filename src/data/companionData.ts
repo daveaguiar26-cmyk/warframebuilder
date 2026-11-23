@@ -153,3 +153,39 @@ export function isValidParts(kind: CompanionRecord['kind'], parts: CompanionPart
   return Object.keys(slots).every((slot) => slots[slot].some((option) => option.name === parts[slot]))
     && Object.keys(parts).every((slot) => slot in slots)
 }
+
+/**
+ * Mods aceites por cada arma de companheiro (frase "This weapon accepts ... Mods" de cada página
+ * da wiki, ex.: https://wiki.warframe.com/w/Laser_Rifle). Variantes Prime/Prisma usam a base.
+ */
+export interface CompanionWeaponClass {
+  category: 'Primary' | 'Secondary' | 'Melee'
+  /** Tipos de mod aceites, comparados com as pastas de mods (rifle, shotgun, pistol, sniper, melee). */
+  modTypes: string[]
+}
+
+const rifle: CompanionWeaponClass = { category: 'Primary', modTypes: ['Rifle'] }
+export const companionWeaponClasses: Record<string, CompanionWeaponClass> = {
+  'Laser Rifle': rifle,
+  Artax: rifle,
+  Stinger: rifle,
+  Verglas: rifle,
+  'Deth Machine Rifle': rifle,
+  Cryotra: rifle,
+  Helstrum: rifle,
+  Multron: rifle,
+  Tazicor: rifle,
+  Vulcax: rifle,
+  Vulklok: { category: 'Primary', modTypes: ['Rifle', 'Sniper'] },
+  Sweeper: { category: 'Primary', modTypes: ['Shotgun'] },
+  'Burst Laser': { category: 'Secondary', modTypes: ['Pistol'] },
+  Deconstructor: { category: 'Melee', modTypes: ['Melee'] },
+  Akaten: { category: 'Melee', modTypes: ['Melee'] },
+  Batoten: { category: 'Melee', modTypes: ['Melee'] },
+  Lacerten: { category: 'Melee', modTypes: ['Melee'] },
+}
+
+export function getCompanionWeaponClass(weaponName: string): CompanionWeaponClass | undefined {
+  const baseName = weaponName.replace(/^(Prime|Prisma) /, '').replace(/ Prime$/, '')
+  return companionWeaponClasses[baseName]
+}

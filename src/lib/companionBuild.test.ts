@@ -4,6 +4,7 @@ import { decodeBuildCode, encodeBuildCode } from './buildCode'
 import { modularCompanions } from '../data/companionData'
 import {
   createCompanionSlots,
+  createWeaponSlots,
   getCompanionWeapon,
   getRoboticWeapons,
   restoreCompanionBuild,
@@ -24,14 +25,15 @@ const base = { baseDrain: 2, polarity: 'vazarin', fusionLimit: 10, type: 'Compan
 const vitality: ModRecord = { ...base, uniqueName: '/Lotus/Upgrades/Mods/Sentinel/SentinelHealthMaxMod', name: 'Enhanced Vitality' }
 const bite: ModRecord = { ...base, uniqueName: '/Lotus/Upgrades/Mods/Sentinel/Kubrow/KubrowCritMod', name: 'Bite' }
 const sweeper = { uniqueName: '/Lotus/Types/Sentinels/SentinelWeapons/SentShotgun', name: 'Sweeper', category: 'Primary' as const, type: 'Companion Weapon' }
+const pointBlank: ModRecord = { baseDrain: 4, polarity: 'madurai', fusionLimit: 5, type: 'Shotgun Mod', uniqueName: '/Lotus/Upgrades/Mods/Shotgun/WeaponDamageAmountMod', name: 'Point Blank' }
 const catalog = { companions: [carrier], mods: [vitality, bite], weapons: [sweeper] }
 
 describe('companion build codes', () => {
   it('round-trips a companion build through a WFB1 code', () => {
     const slots = createCompanionSlots(carrier)
     slots[3] = { ...slots[3], modId: vitality.uniqueName, rank: 10 }
-    const state = { companionId: carrier.uniqueName, reactor: true, slots, weaponId: sweeper.uniqueName, parts: {} }
-    const decoded = decodeBuildCode(encodeBuildCode({ v: 1, itens: toCompanionBuildItems(state) }))
+    const state = { companionId: carrier.uniqueName, reactor: true, slots, weaponId: sweeper.uniqueName, parts: {}, weaponSlots: createWeaponSlots(), weaponCatalyst: true }
+    const decoded = decodeBuildCode(encodeBuildCode({ v: 1, itens: toCompanionBuildItems(state, sweeper) }))
     expect(decoded.itens).toHaveLength(2)
     expect(restoreCompanionBuild(decoded.itens[0], catalog, decoded.itens)).toEqual(state)
   })
@@ -39,7 +41,7 @@ describe('companion build codes', () => {
   it('rejects beast mods on a sentinel', () => {
     const slots = createCompanionSlots(carrier)
     slots[0] = { ...slots[0], modId: bite.uniqueName }
-    const item = toCompanionBuildItem({ companionId: carrier.uniqueName, reactor: false, slots, weaponId: null, parts: {} })
+    const item = toCompanionBuildItem({ companionId: carrier.uniqueName, reactor: false, slots, weaponId: null, parts: {}, weaponSlots: createWeaponSlots(), weaponCatalyst: false })
     expect(() => restoreCompanionBuild(item, catalog)).toThrow('não pode ser usado')
   })
 })
@@ -54,13 +56,15 @@ describe('modular companions', () => {
     const parts = { modelo: 'Lambeo', nucleo: 'Lehan', giroscopio: 'Atheca', suporte: 'Jonsin' }
     const slots = createCompanionSlots(moa, parts)
     expect(slots[4].factoryPolarity).toBe('madurai')
-    const state = { companionId: moa.uniqueName, reactor: false, slots, weaponId: sweeper.uniqueName, parts }
-    const decoded = decodeBuildCode(encodeBuildCode({ v: 1, itens: toCompanionBuildItems(state) }))
-    expect(restoreCompanionBuild(decoded.itens[0], { companions: [moa], mods: [], weapons }, decoded.itens)).toEqual(state)
+    const weaponSlots = createWeaponSlots()
+    weaponSlots[0] = { ...weaponSlots[0], modId: pointBlank.uniqueName, rank: 5 }
+    const state = { companionId: moa.uniqueName, reactor: false, slots, weaponId: sweeper.uniqueName, parts, weaponSlots, weaponCatalyst: false }
+    const decoded = decodeBuildCode(encodeBuildCode({ v: 1, itens: toCompanionBuildItems(state, sweeper) }))
+    expect(restoreCompanionBuild(decoded.itens[0], { companions: [moa], mods: [pointBlank], weapons }, decoded.itens)).toEqual(state)
   })
 
   it('rejects unknown parts', () => {
-    const item = toCompanionBuildItem({ companionId: moa.uniqueName, reactor: false, slots: createCompanionSlots(moa), weaponId: null, parts: { nucleo: 'Inventado' } })
+    const item = toCompanionBuildItem({ companionId: moa.uniqueName, reactor: false, slots: createCompanionSlots(moa), weaponId: null, parts: { nucleo: 'Inventado' }, weaponSlots: createWeaponSlots(), weaponCatalyst: false })
     expect(() => restoreCompanionBuild(item, { companions: [moa], mods: [] })).toThrow('peças')
   })
 
