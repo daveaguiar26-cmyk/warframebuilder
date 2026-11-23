@@ -18,8 +18,11 @@ interface TesseractModule {
 }
 
 export async function recognizeText(image: Blob, onProgress?: (status: string, progress: number) => void): Promise<string> {
-  const loaded = await import(/* @vite-ignore */ tesseractUrl) as TesseractModule & { default?: TesseractModule }
-  const tesseract = loaded.createWorker ? loaded : loaded.default
+  // O build ESM pode expor createWorker directamente ou dentro de "default".
+  const loaded = await import(/* @vite-ignore */ tesseractUrl) as Partial<TesseractModule> & { default?: TesseractModule }
+  const tesseract: TesseractModule | undefined = typeof loaded.createWorker === 'function'
+    ? { createWorker: loaded.createWorker }
+    : loaded.default
   if (!tesseract) throw new Error('Não foi possível carregar o leitor de texto.')
   const worker = await tesseract.createWorker('eng', 1, {
     logger: (message) => onProgress?.(message.status, message.progress),
