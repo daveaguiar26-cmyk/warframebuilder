@@ -159,3 +159,15 @@ sessão. As divergências e aproximações estão assinaladas junto de cada regr
 	estabilizador acrescenta uma polaridade.
 - MOA e Hound: 4 polaridades Penjaga mais a do suporte ou do estabilizador.
 	Usam as regras de mods das sentinelas, e cada um só vê os seus preceitos.
+
+## Slots Exilus e Stance das armas (23/11/2026)
+
+- Exilus: aceita só mods com `isUtility` nos dados `@wfcd/items`, e gasta
+	capacidade como um slot normal.
+- Stance (só armas corpo a corpo): dá capacidade como a Aura, com as mesmas
+	regras de polaridade descritas acima. A polaridade de fábrica vem de
+	`stancePolarity`. Os dados não indicam a classe da arma (ex.: "Dual Swords"),
+	por isso o slot aceita qualquer Stance. A Stance não altera as estatísticas
+	calculadas.
+- Os códigos WFB1 de armas passam a ter 10 slots (8 normais, Exilus e Stance).
+	Os códigos antigos, com 8 slots, continuam a abrir.
