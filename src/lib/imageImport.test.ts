@@ -27,7 +27,8 @@ describe('image import text matching', () => {
 
   it('does not count a short name inside a longer one', () => {
     expect(findNamesInText('AMALGAM SERRATION', [serration, amalgam]).map((entry) => entry.name)).toEqual(['Amalgam Serration'])
-    expect(findNamesInText('AMALGAM SERRATION  SERRATION', [serration, amalgam])).toHaveLength(2)
+    // Um nome contido noutro já encontrado é ignorado (no jogo, as variantes excluem a base).
+    expect(findNamesInText('AMALGAM SERRATION\nSERRATION', [serration, amalgam])).toHaveLength(1)
   })
 
   it('tolerates small OCR errors in long names', () => {
@@ -46,7 +47,7 @@ describe('image import text matching', () => {
     const result = detectBuildFromText('MESA\nUMBRAL\nINTENSIFY\nINTENSIFY STREAMLINE', catalog)
     expect(result.item).toEqual({ kind: 'warframe', id: '/mesa', name: 'Mesa' })
     // Pela ordem de leitura da imagem.
-    expect(result.mods.map((entry) => entry.uniqueName)).toEqual([umbral.uniqueName, intensify.uniqueName, streamline.uniqueName])
+    expect(result.mods.map((entry) => entry.uniqueName)).toEqual([umbral.uniqueName, streamline.uniqueName])
   })
 
   it('detects a weapon build', () => {
@@ -86,5 +87,19 @@ describe('approximateFind', () => {
 
   it('returns nothing above the error limit', () => {
     expect(approximateFind('SEISMICWAVE', 'MAGNETICRUSH', 2)).toBeUndefined()
+  })
+})
+
+describe('names split across two lines', () => {
+  it('joins the top line of a card with its bottom line further down (OCR reads row by row)', () => {
+    const text = 'Galvanized\nPrimed Smite Y\nPrimed Pressure\nCritical Damage\n~~ Elementalist . -\nInfested\nPoint'
+    const names = [
+      { name: 'Galvanized Elementalist' },
+      { name: 'Primed Smite Infested' },
+      { name: 'Primed Pressure Point' },
+      { name: 'Pressure Point' },
+    ]
+    expect(findNamesInText(text, names).map((entry) => entry.name))
+      .toEqual(['Galvanized Elementalist', 'Primed Smite Infested', 'Primed Pressure Point'])
   })
 })

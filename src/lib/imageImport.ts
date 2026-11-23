@@ -62,31 +62,85 @@ function tolerance(length: number): number {
 
 interface Named { name: string }
 
+interface LineMatch { line: number; start: number; end: number }
+
+/** Procura exacta e depois aproximada numa só linha. */
+function findInLine(key: string, line: string): { start: number; end: number } | undefined {
+  const exact = line.indexOf(key)
+  if (exact !== -1) return { start: exact, end: exact + key.length }
+  return approximateFind(key, line, tolerance(key.length))
+}
+
+function findInLines(key: string, lines: string[], from = 0, accept?: (line: string, match: { start: number; end: number }) => boolean): LineMatch | undefined {
+  for (let index = from; index < lines.length; index += 1) {
+    const match = findInLine(key, lines[index])
+    if (match && (!accept || accept(lines[index], match))) return { line: index, ...match }
+  }
+  return undefined
+}
+
+/** Letras soltas que o OCR junta ao início ou fim de uma linha (molduras dos cartões). */
+const edgeSlack = 3
+
 /**
- * Procura nomes no texto, do mais longo para o mais curto, e consome o trecho encontrado
- * para que "Serration" não seja também contado dentro de "Amalgam Serration".
- * O resultado vem pela ordem de leitura da imagem (posição no texto).
+ * Nomes em duas linhas no cartão ("Primed Pressure" / "Point") saem separados no texto, porque o
+ * OCR lê a linha de cima de todos os cartões antes da de baixo. Aceita-se o início do nome no fim
+ * de uma linha e o resto no início de uma linha mais abaixo.
+ */
+function findSplit(words: string[], lines: string[]): LineMatch[] | undefined {
+  for (let split = 1; split < words.length; split += 1) {
+    const head = compact(words.slice(0, split).join(''))
+    const tail = compact(words.slice(split).join(''))
+    if (head.length < 4 || tail.length < 4) continue
+    let from = 0
+    while (from < lines.length) {
+      const headMatch = findInLines(head, lines, from, (line, match) => line.length - match.end <= edgeSlack)
+      if (!headMatch) break
+      const tailMatch = findInLines(tail, lines, headMatch.line + 1, (_, match) => match.start <= edgeSlack)
+      if (tailMatch) return [headMatch, tailMatch]
+      from = headMatch.line + 1
+    }
+  }
+  return undefined
+}
+
+function trigrams(value: string): Set<string> {
+  const result = new Set<string>()
+  for (let index = 0; index + 3 <= value.length; index += 1) result.add(value.slice(index, index + 3))
+  return result
+}
+
+/**
+ * Procura nomes no texto do OCR, linha a linha, do mais longo para o mais curto.
+ * - Um nome que esteja contido noutro já encontrado é ignorado ("Pressure Point" dentro de
+ *   "Primed Pressure Point"): no jogo, as variantes Primed/Umbral excluem a versão base.
+ * - O trecho usado é apagado da linha, para não servir a outro nome.
+ * O resultado vem pela ordem de leitura da imagem (linha onde o nome começa).
  */
 export function findNamesInText<T extends Named>(text: string, candidates: T[]): T[] {
-  let haystack = compact(text)
+  const lines = text.split(/\r?\n/).map(compact).filter((line) => line.length > 0)
+  const available = trigrams(lines.join('|'))
   const sorted = [...candidates]
-    .map((candidate) => ({ candidate, key: compact(candidate.name) }))
+    .map((candidate) => ({ candidate, key: compact(candidate.name), words: candidate.name.split(/\s+/) }))
     .filter(({ key }) => key.length >= 4)
     .sort((a, b) => b.key.length - a.key.length)
 
-  const found: Array<{ candidate: T; position: number }> = []
-  const seenKeys = new Set<string>()
-  for (const { candidate, key } of sorted) {
-    if (seenKeys.has(key)) continue
-    const exact = haystack.indexOf(key)
-    const match = exact !== -1
-      ? { start: exact, end: exact + key.length }
-      : approximateFind(key, haystack, tolerance(key.length))
-    if (!match) continue
-    const position = match.start
-    seenKeys.add(key)
-    found.push({ candidate, position })
-    haystack = haystack.slice(0, match.start) + '#'.repeat(match.end - match.start) + haystack.slice(match.end)
+  const found: Array<{ candidate: T; position: number; key: string }> = []
+  for (const { candidate, key, words } of sorted) {
+    if (found.some((entry) => entry.key.includes(key))) continue
+    // Filtro rápido: pelo menos 40% dos trigramas do nome têm de existir no texto.
+    const keyTrigrams = [...trigrams(key)]
+    if (keyTrigrams.length && keyTrigrams.filter((gram) => available.has(gram)).length / keyTrigrams.length < 0.4) continue
+
+    const whole = findInLines(key, lines)
+    const parts = whole ? [whole] : findSplit(words, lines)
+    if (!parts) continue
+    // Ordem de leitura: linha e, na mesma linha, posição do início do nome.
+    found.push({ candidate, position: parts[0].line * 10_000 + parts[0].start, key })
+    for (const part of parts) {
+      const line = lines[part.line]
+      lines[part.line] = line.slice(0, part.start) + '#'.repeat(part.end - part.start) + line.slice(part.end)
+    }
   }
   return found.sort((a, b) => a.position - b.position).map(({ candidate }) => candidate)
 }
@@ -154,12 +208,19 @@ export function detectBuildFromText(text: string, catalog: ImportCatalog): Image
     ...catalog.companions.map((companion) => ({ kind: 'companheiro' as const, id: companion.uniqueName, name: companion.name })),
   ]
 
-  const mods = findNamesInText(text, playableMods(catalog.mods))
-  const modKind = kindFromMods(mods)
+  const candidates = playableMods(catalog.mods)
   const itemMatches = findNamesInText(text, items)
+  if (itemMatches.length === 1) {
+    // Item conhecido: só se procuram mods compatíveis, para que um falso positivo não gaste
+    // texto de um mod verdadeiro.
+    const item = itemMatches[0]
+    return { item, mods: findNamesInText(text, compatibleWith(item, catalog, candidates)) }
+  }
+
+  const mods = findNamesInText(text, candidates)
+  const modKind = kindFromMods(mods)
   // Com várias correspondências, prefere o tipo coerente com os mods e o nome mais longo.
   const item = itemMatches
     .sort((a, b) => Number(b.kind === modKind) - Number(a.kind === modKind) || b.name.length - a.name.length)[0]
-
   return { item, mods: item ? compatibleWith(item, catalog, mods) : mods }
 }
