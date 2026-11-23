@@ -38,13 +38,47 @@ const statNames: Record<string, BonusKey> = {
   'ability efficiency': 'efficiency',
 }
 
-/** Valores base no ranque 30. Warframes sem escudo (ex.: Inaros) continuam com 0. */
+interface RankUpGain { health: number; shield: number; armor: number; energy: number; strength?: number }
+
+/**
+ * Excepções da tabela "Rank-Up Exceptions" (wiki Warframes, lida até ao Nidus em 23/11/2026).
+ * Ganho total no ranque 30: vida | escudo | armadura | energia.
+ */
+const g = (health: number, shield: number, armor: number, energy: number, strength?: number): RankUpGain =>
+  ({ health, shield, armor, energy, strength })
+export const rankUpExceptions: Record<string, RankUpGain> = {
+  Baruuk: g(100, 100, 0, 100), 'Baruuk Prime': g(100, 100, 0, 100),
+  'Chroma Prime': g(100, 100, 0, 100),
+  Dante: g(90, 90, 0, 70),
+  Garuda: g(100, 100, 0, 100), 'Garuda Prime': g(100, 100, 0, 100),
+  Grendel: g(200, 0, 0, 50), 'Grendel Prime': g(200, 0, 0, 50),
+  Hildryn: g(100, 500, 0, 0), 'Hildryn Prime': g(100, 500, 0, 0),
+  Inaros: g(200, 0, 0, 50), 'Inaros Prime': g(200, 0, 0, 50),
+  Koumei: g(100, 100, 0, 100),
+  Kullervo: g(200, 0, 100, 50),
+  Lavos: g(200, 100, 100, 0), 'Lavos Prime': g(200, 100, 100, 0),
+  Narin: g(100, 100, 0, 100),
+  Nezha: g(100, 50, 0, 50), 'Nezha Prime': g(100, 50, 0, 50),
+  Nidus: g(100, 0, 100, 50, 0.15), 'Nidus Prime': g(100, 0, 100, 50, 0.15),
+}
+
+function getRankUpGain(frame: WarframeRecord): RankUpGain {
+  return rankUpExceptions[frame.name] ?? {
+    health: rank30Bonus.health,
+    shield: frame.shield > 0 ? rank30Bonus.shield : 0,
+    armor: 0,
+    energy: rank30Bonus.energy,
+  }
+}
+
+/** Valores base no ranque 30. Warframes sem escudo continuam com 0. */
 export function getRank30BaseStats(frame: WarframeRecord): WarframeBaseStats {
+  const gain = getRankUpGain(frame)
   return {
-    health: frame.health + rank30Bonus.health,
-    shield: frame.shield > 0 ? frame.shield + rank30Bonus.shield : 0,
-    armor: frame.armor,
-    energy: frame.power + rank30Bonus.energy,
+    health: frame.health + gain.health,
+    shield: frame.shield + gain.shield,
+    armor: frame.armor + gain.armor,
+    energy: frame.power + gain.energy,
   }
 }
 
@@ -87,13 +121,14 @@ export function calculateWarframeStats(
 
   const base = getRank30BaseStats(frame)
   const efficiency = 1 + bonuses.efficiency
+  const rankStrength = getRankUpGain(frame).strength ?? 0
 
   return {
     health: base.health * (1 + bonuses.health),
     shield: base.shield * (1 + bonuses.shield),
     armor: base.armor * (1 + bonuses.armor),
     energy: base.energy * (1 + bonuses.energy),
-    strength: 1 + bonuses.strength,
+    strength: 1 + rankStrength + bonuses.strength,
     duration: 1 + bonuses.duration,
     range: 1 + bonuses.range,
     efficiency,

@@ -13,6 +13,7 @@ const mesa: WarframeRecord = {
 }
 
 const inaros: WarframeRecord = { ...mesa, name: 'Inaros', health: 2110, shield: 0, armor: 200 }
+const nidus: WarframeRecord = { ...mesa, name: 'Nidus', health: 675, shield: 0, armor: 300 }
 
 function upgrade(name: string, ...stats: string[]) {
   return { upgrade: { name, levelStats: [{ stats }] }, rank: 0 }
@@ -27,6 +28,11 @@ describe('warframe calculations', () => {
     const base = getRank30BaseStats(inaros)
     expect(base.health).toBe(2310)
     expect(base.shield).toBe(0)
+  })
+
+  it('applies the Nidus rank-up exception (+100 armor, +15% strength)', () => {
+    expect(getRank30BaseStats(nidus)).toEqual({ health: 775, shield: 0, armor: 400, energy: 150 })
+    expect(calculateWarframeStats(nidus).strength).toBeCloseTo(1.15)
   })
 
   it('applies percentage mods to rank 30 base values', () => {

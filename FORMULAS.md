@@ -69,8 +69,12 @@ sessão. As divergências e aproximações estão assinaladas junto de cada regr
 	[Excalibur](https://wiki.warframe.com/w/Excalibur),
 	[Inaros](https://wiki.warframe.com/w/Inaros) e
 	[Nidus](https://wiki.warframe.com/w/Nidus). Um Warframe sem escudo continua
-	com 0. A wiki tem uma lista de "Rank-Up Exceptions" que ainda não está
-	modelada.
+	com 0.
+- Excepções ("Rank-Up Exceptions", mesma página) modeladas em
+	`rankUpExceptions`: Baruuk, Chroma Prime, Dante, Garuda, Grendel, Hildryn,
+	Inaros, Koumei, Kullervo, Lavos, Narin, Nezha e Nidus (Nidus também ganha
+	+15% de Força). **A tabela só foi lida até ao Nidus.** Os Warframes que vêm
+	depois na ordem alfabética podem ter excepções ainda em falta.
 - Os mods de vida, escudo, armadura e energia aplicam-se ao valor do ranque 30:
 	`base30 * (1 + soma dos bónus)` (mesma regra de
 	[Calculating Bonuses](https://wiki.warframe.com/w/Calculating_Bonuses)).
