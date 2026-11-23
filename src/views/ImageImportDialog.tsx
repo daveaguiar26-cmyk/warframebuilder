@@ -27,6 +27,7 @@ export function ImageImportDialog({ catalog, onApply, onClose }: ImageImportDial
   const [message, setMessage] = useState('')
   const [itemId, setItemId] = useState('')
   const [mods, setMods] = useState<Array<{ mod: ModRecord; rank: number }>>([])
+  const [rawText, setRawText] = useState('')
 
   const items = useMemo<DetectedItem[]>(() => [
     ...catalog.warframes.map((entry) => ({ kind: 'warframe' as const, id: entry.uniqueName, name: entry.name })),
@@ -52,6 +53,7 @@ export function ImageImportDialog({ catalog, onApply, onClose }: ImageImportDial
         setMessage(status === 'recognizing text' ? 'A ler a imagem...' : 'A preparar o leitor de texto...')
         setProgress(value)
       })
+      setRawText(text)
       const result = detectBuildFromText(text, catalog)
       setItemId(result.item?.id ?? '')
       setMods(result.mods.map((mod) => ({ mod, rank: mod.fusionLimit })))
@@ -138,6 +140,10 @@ export function ImageImportDialog({ catalog, onApply, onClose }: ImageImportDial
               ))}
             </div>
             {mods.length > maxMods && <p className="import-code-error">Há mais mods do que slots. Remova os que foram lidos por engano.</p>}
+            <details className="ocr-raw-text">
+              <summary>Texto lido da imagem</summary>
+              <pre>{rawText.trim() || '(vazio)'}</pre>
+            </details>
             <p className="raw-data-note">Os ranques assumem o máximo e as polaridades ficam as de fábrica: a imagem não permite lê-los com segurança.</p>
           </>
         )}

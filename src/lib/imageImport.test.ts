@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ModRecord } from '../types'
-import { compact, detectBuildFromText, findNamesInText } from './imageImport'
+import { approximateFind, compact, detectBuildFromText, findNamesInText } from './imageImport'
 
 function mod(name: string, type: string, path = name.replaceAll(' ', ''), fusionLimit = 10): ModRecord {
   return { uniqueName: `/Lotus/Upgrades/Mods/${path}`, name, type, baseDrain: 4, polarity: 'madurai', fusionLimit }
@@ -33,6 +33,13 @@ describe('image import text matching', () => {
   it('tolerates small OCR errors in long names', () => {
     expect(findNamesInText('STREAMLlNE', [streamline])).toHaveLength(1)
     expect(findNamesInText('SERRATI0N', [serration])).toHaveLength(1)
+    // Letras a mais ou a menos, comuns em OCR sobre fundos com textura.
+    expect(findNamesInText('GALVANIZD ELEMENTTALIST', [{ name: 'Galvanized Elementalist' }])).toHaveLength(1)
+    expect(findNamesInText('Shockng Touch', [{ name: 'Shocking Touch' }])).toHaveLength(1)
+  })
+
+  it('does not match unrelated short words', () => {
+    expect(findNamesInText('RANGE SLASH TOTAL', [serration, streamline])).toHaveLength(0)
   })
 
   it('detects a Warframe build and ignores internal mod variants', () => {
@@ -69,5 +76,15 @@ describe('image import with real screenshot text', () => {
     const result = detectBuildFromText(text, screenshot)
     expect(result.item?.name).toBe('Dual Ichor')
     expect(result.mods.map((entry) => entry.name)).toEqual(['Swirling Tiger', 'Galvanized Steel', 'Primed Pressure Point'])
+  })
+})
+
+describe('approximateFind', () => {
+  it('finds a pattern with one missing letter', () => {
+    expect(approximateFind('SEISMICWAVE', 'XXSEISMCWAVEXX', 2)).toMatchObject({ end: 12 })
+  })
+
+  it('returns nothing above the error limit', () => {
+    expect(approximateFind('SEISMICWAVE', 'MAGNETICRUSH', 2)).toBeUndefined()
   })
 })

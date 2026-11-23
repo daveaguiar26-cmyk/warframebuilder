@@ -28,17 +28,36 @@ export function compact(value: string): string {
     .replace(/[^A-Z0-9]/g, '')
 }
 
-function hammingWithin(a: string, b: string, maxErrors: number): boolean {
-  let errors = 0
-  for (let index = 0; index < a.length; index += 1) {
-    if (a[index] !== b[index] && (errors += 1) > maxErrors) return false
+/**
+ * Procura aproximada (algoritmo de Sellers): distância de edição mínima do padrão a qualquer
+ * trecho do texto, aceitando letras trocadas, a mais ou a menos. Devolve o trecho encontrado.
+ */
+export function approximateFind(pattern: string, text: string, maxErrors: number): { start: number; end: number } | undefined {
+  const length = pattern.length
+  let previous = Array.from({ length: length + 1 }, (_, index) => index)
+  let best: { distance: number; end: number } | undefined
+  for (let column = 0; column < text.length; column += 1) {
+    const current = [0]
+    for (let row = 1; row <= length; row += 1) {
+      const substitution = previous[row - 1] + (pattern[row - 1] === text[column] ? 0 : 1)
+      current[row] = Math.min(substitution, previous[row] + 1, current[row - 1] + 1)
+    }
+    if (current[length] <= maxErrors && (!best || current[length] < best.distance)) {
+      best = { distance: current[length], end: column }
+      if (best.distance === 0) break
+    }
+    previous = current
   }
-  return true
+  if (!best) return undefined
+  return { start: Math.max(0, best.end - length + 1), end: best.end + 1 }
 }
 
-/** Erros de OCR tolerados: nenhum até 6 letras, depois 1 por cada 7 letras. */
+/** Erros de OCR tolerados conforme o tamanho do nome (sem espaços). */
 function tolerance(length: number): number {
-  return length < 7 ? 0 : Math.floor(length / 7)
+  if (length < 5) return 0
+  if (length < 8) return 1
+  if (length < 12) return 2
+  return 3
 }
 
 interface Named { name: string }
@@ -59,20 +78,15 @@ export function findNamesInText<T extends Named>(text: string, candidates: T[]):
   const seenKeys = new Set<string>()
   for (const { candidate, key } of sorted) {
     if (seenKeys.has(key)) continue
-    let position = haystack.indexOf(key)
-    const maxErrors = tolerance(key.length)
-    if (position === -1 && maxErrors > 0) {
-      for (let start = 0; start + key.length <= haystack.length; start += 1) {
-        if (hammingWithin(key, haystack.slice(start, start + key.length), maxErrors)) {
-          position = start
-          break
-        }
-      }
-    }
-    if (position === -1) continue
+    const exact = haystack.indexOf(key)
+    const match = exact !== -1
+      ? { start: exact, end: exact + key.length }
+      : approximateFind(key, haystack, tolerance(key.length))
+    if (!match) continue
+    const position = match.start
     seenKeys.add(key)
     found.push({ candidate, position })
-    haystack = haystack.slice(0, position) + '#'.repeat(key.length) + haystack.slice(position + key.length)
+    haystack = haystack.slice(0, match.start) + '#'.repeat(match.end - match.start) + haystack.slice(match.end)
   }
   return found.sort((a, b) => a.position - b.position).map(({ candidate }) => candidate)
 }

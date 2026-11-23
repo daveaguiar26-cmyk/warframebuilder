@@ -405,3 +405,5 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 .image-import-mod { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line-soft); background: #0f151e; }
 .image-import-mod span { display: flex; flex-direction: column; color: var(--text); font-size: 13px; }
 .image-import-mod small { color: var(--muted); font-size: 11px; }
+.ocr-raw-text { color: var(--muted); font-size: 12px; }
+.ocr-raw-text pre { max-height: 160px; overflow: auto; margin: 6px 0 0; padding: 8px; border: 1px solid var(--line-soft); background: #0b0f14; color: var(--text-soft); white-space: pre-wrap; font: 11px "JetBrains Mono", monospace; }
