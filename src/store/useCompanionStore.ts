@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { CompanionRecord } from '../types'
 import type { BuildModSlot } from './useCatalogStore'
 import { createCompanionSlots, type CompanionBuildState } from '../lib/companionBuild'
+import { defaultParts, getCompanionPolarities, type CompanionParts } from '../data/companionData'
 
 interface CompanionState {
   query: string
@@ -9,6 +10,8 @@ interface CompanionState {
   reactor: boolean
   slots: BuildModSlot[]
   weaponId: string | null
+  parts: CompanionParts
+  setPart: (companion: CompanionRecord, slot: string, value: string) => void
   setWeapon: (weaponId: string | null) => void
   setQuery: (query: string) => void
   selectCompanion: (companion: CompanionRecord) => void
@@ -30,13 +33,27 @@ export const useCompanionStore = create<CompanionState>((set) => ({
   reactor: false,
   slots: createCompanionSlots(),
   weaponId: null,
+  parts: {},
+  setPart: (companion, slot, value) => set((state) => {
+    const parts = { ...state.parts, [slot]: value }
+    const polarities = getCompanionPolarities(companion, parts)
+    return {
+      parts,
+      slots: state.slots.map((entry, index) => {
+        const factoryPolarity = polarities[index] ?? 'none'
+        const polarity = entry.polarity === entry.factoryPolarity ? factoryPolarity : entry.polarity
+        return { ...entry, factoryPolarity, polarity }
+      }),
+    }
+  }),
   setWeapon: (weaponId) => set({ weaponId }),
   setQuery: (query) => set({ query }),
   selectCompanion: (companion) => set((state) => state.companionId === companion.uniqueName ? state : {
     companionId: companion.uniqueName,
     reactor: false,
-    slots: createCompanionSlots(companion),
+    slots: createCompanionSlots(companion, defaultParts(companion.kind)),
     weaponId: null,
+    parts: defaultParts(companion.kind),
   }),
   equipMod: (slotIndex, modId) => {
     let equipped = false
@@ -51,5 +68,5 @@ export const useCompanionStore = create<CompanionState>((set) => ({
   setModRank: (slotIndex, rank) => set((state) => ({ slots: updateSlot(state.slots, slotIndex, { rank }) })),
   setSlotPolarity: (slotIndex, polarity) => set((state) => ({ slots: updateSlot(state.slots, slotIndex, { polarity }) })),
   setReactor: (reactor) => set({ reactor }),
-  restore: ({ companionId, reactor, slots, weaponId }) => set({ companionId, reactor, slots, weaponId }),
+  restore: ({ companionId, reactor, slots, weaponId, parts }) => set({ companionId, reactor, slots, weaponId, parts }),
 }))

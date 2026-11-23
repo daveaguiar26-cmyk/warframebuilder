@@ -115,8 +115,31 @@ sessão. As divergências e aproximações estão assinaladas junto de cada regr
 	bestas (`/Sentinel/Kubrow/`) nem preceitos de bestas (`/Friendly/Pets/`); as
 	bestas não usam preceitos de sentinela. Preceitos exclusivos de um
 	companheiro específico ainda não são filtrados.
-- Armas de sentinela: escolhem-se no separador Companheiros, junto da sentinela,
-	vão no mesmo código (item `arma-companheiro`) e são calculadas como armas. A
-	chance de estado vem de `procChance`. Por agora mostram-se só os valores base,
-	sem mods: os dados não indicam a classe da arma (espingarda, caçadeira...),
-	que é preciso para saber que mods aceita.
+- Armas por tipo de companheiro:
+	- Sentinelas e MOA escolhem uma arma robótica: todas as armas de companheiro
+		do catálogo, excepto as de Hound. A wiki diz que Cryotra, Helstrum, Tazicor e
+		Vulcax são "Robotic weapons" que servem MOA e sentinelas
+		([MOA (Companion)](https://wiki.warframe.com/w/MOA_(Companion))). A Multron
+		foi incluída por estar na mesma pasta de dados; falta confirmar.
+	- Hound: a arma é definida pelo modelo: Bhaira → Lacerten, Dorma → Batoten,
+		Hec → Akaten ([Hound (Companion)](https://wiki.warframe.com/w/Hound_(Companion))).
+	- Bestas: garras escritas à mão em `src/data/companionData.ts`, a partir de
+		[Claws (Beast)](https://wiki.warframe.com/w/Claws_(Beast)). A página não
+		indica a velocidade de ataque, por isso não há DPS de referência. Na
+		Pharaoh Predasite, a tabela diz 324 e as notas do Update 37 dizem 325;
+		usa-se a tabela.
+	- As armas vão no mesmo código (item `arma-companheiro`) e são calculadas
+		como armas, sem mods por agora: os dados não indicam a classe da arma.
+- MOA ([MOA (Companion)](https://wiki.warframe.com/w/MOA_(Companion))): base
+	350 / 350 / 350; o núcleo e o giroscópio somam percentagens. Usam-se as
+	tabelas-resumo da página, que valem o dobro da lista: com elas o total dá
+	sempre 1190, como a página indica, e os intervalos batem certo (vida
+	367–473). Isto corresponde ao estado gilded, obrigatório no ranque 30. O
+	modelo só muda os preceitos; o suporte (bracket) acrescenta uma polaridade.
+- Hound ([Hound (Companion)](https://wiki.warframe.com/w/Hound_(Companion))): o
+	núcleo define a base (Adlet 350/450/350, Garmr 350/350/450, Raiju
+	450/350/350) e o suporte aplica percentagens gilded (valores duplicados).
+	Confirmado com a tabela da página: Adlet + Cela = 420 / 585 / 315. O
+	estabilizador acrescenta uma polaridade.
+- MOA e Hound: 4 polaridades Penjaga mais a do suporte ou do estabilizador.
+	Usam as regras de mods das sentinelas, e cada um só vê os seus preceitos.

@@ -22,6 +22,8 @@ export interface BuildCodeItem {
   slots: BuildCodeSlot[]
   /** Opcional: só Warframes. */
   arcanos?: BuildCodeArcane[]
+  /** Opcional: peças de MOA/Hound (ex.: { nucleo: 'Drex' }). */
+  partes?: Record<string, string>
 }
 
 export interface BuildCodeV1 {
@@ -52,6 +54,7 @@ function isBuildCodeItem(value: unknown): value is BuildCodeItem {
     && Array.isArray(value.slots)
     && value.slots.every(isBuildCodeSlot)
     && (value.arcanos === undefined || (Array.isArray(value.arcanos) && value.arcanos.every(isBuildCodeArcane)))
+    && (value.partes === undefined || (isRecord(value.partes) && Object.values(value.partes).every((part) => typeof part === 'string')))
 }
 
 function isBuildCodeArcane(value: unknown): value is BuildCodeArcane {

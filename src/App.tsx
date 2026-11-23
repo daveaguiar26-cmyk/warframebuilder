@@ -34,6 +34,7 @@ import { WarframeView } from './views/WarframeView'
 import { CompanionView } from './views/CompanionView'
 import { useCompanionStore } from './store/useCompanionStore'
 import { restoreCompanionBuild } from './lib/companionBuild'
+import { modularCompanions } from './data/companionData'
 import { companionWeaponType, type CatalogData, type ModRecord, type WeaponRecord } from './types'
 import { EmptyState, ItemImage, ModRow, Stat, formatNumber, formatPercent, matchesSlotPolarity, polarityOptions } from './ui/common'
 
@@ -193,7 +194,7 @@ export default function App() {
     const weapon = firstItem
       ? catalog.weapons.find((item) => item.uniqueName === firstItem.id)
         ?? catalog.warframes?.find((item) => item.uniqueName === firstItem.id)
-        ?? catalog.companions?.find((item) => item.uniqueName === firstItem.id)
+        ?? [...(catalog.companions ?? []), ...modularCompanions].find((item) => item.uniqueName === firstItem.id)
       : undefined
     return { entry, valid: decoded !== null, weapon }
   }
@@ -277,7 +278,7 @@ export default function App() {
     }
     const companionItem = decoded.itens.find((item) => item.tipo === 'companheiro')
     if (companionItem) {
-      restoreCompanion(restoreCompanionBuild(companionItem, { companions: catalog.companions ?? [], mods: catalog.mods, weapons: catalog.weapons }, decoded.itens))
+      restoreCompanion(restoreCompanionBuild(companionItem, { companions: [...(catalog.companions ?? []), ...modularCompanions], mods: catalog.mods, weapons: catalog.weapons }, decoded.itens))
       return 'companheiros'
     }
     const weaponItem = decoded.itens.find((item) => item.tipo === 'arma')

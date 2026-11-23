@@ -76,11 +76,15 @@ describe('filterModsForCompanion', () => {
   const vitality = { ...base, uniqueName: '/Lotus/Upgrades/Mods/Sentinel/SentinelHealthMaxMod', name: 'Enhanced Vitality' }
   const precept = { ...base, uniqueName: '/Lotus/Types/Sentinels/SentinelPrecepts/PrimedRegen', name: 'Primed Regen' }
   const beastMod = { ...base, uniqueName: '/Lotus/Upgrades/Mods/Sentinel/Kubrow/KubrowBiteMod', name: 'Bite' }
-  const petPrecept = { ...base, uniqueName: '/Lotus/Types/Friendly/Pets/KavatPrecepts/Charm', name: 'Charm' }
-  const all = [vitality, precept, beastMod, petPrecept]
+  const petPrecept = { ...base, uniqueName: '/Lotus/Types/Friendly/Pets/CatbrowPetPrecepts/Charm', name: 'Charm' }
+  const moaPrecept = { ...base, uniqueName: '/Lotus/Types/Friendly/Pets/MoaPets/MoaPetPrecepts/AntiGrav', name: 'Anti-Grav Grenade' }
+  const houndPrecept = { ...base, uniqueName: '/Lotus/Types/Friendly/Pets/ZanukaPets/ZanukaPetPrecepts/NullAudit', name: 'Null Audit' }
+  const all = [vitality, precept, beastMod, petPrecept, moaPrecept, houndPrecept]
 
-  it('separates sentinel and beast mods', () => {
+  it('separates mods and precepts by companion type', () => {
     expect(filterModsForCompanion(all, 'Sentinel').map((mod) => mod.name)).toEqual(['Enhanced Vitality', 'Primed Regen'])
     expect(filterModsForCompanion(all, 'Beast').map((mod) => mod.name)).toEqual(['Enhanced Vitality', 'Bite', 'Charm'])
+    expect(filterModsForCompanion(all, 'MOA').map((mod) => mod.name)).toEqual(['Enhanced Vitality', 'Anti-Grav Grenade'])
+    expect(filterModsForCompanion(all, 'Hound').map((mod) => mod.name)).toEqual(['Enhanced Vitality', 'Null Audit'])
   })
 })

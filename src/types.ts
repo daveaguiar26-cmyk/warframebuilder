@@ -69,7 +69,7 @@ export interface ArcaneRecord {
   levelStats?: Array<{ stats: string[] }>
 }
 
-export type CompanionKind = 'Sentinel' | 'Beast'
+export type CompanionKind = 'Sentinel' | 'Beast' | 'MOA' | 'Hound'
 
 export interface CompanionRecord {
   uniqueName: string

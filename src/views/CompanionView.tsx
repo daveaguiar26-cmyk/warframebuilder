@@ -5,14 +5,28 @@ import { calculateCompanionStats } from '../engine/companion'
 import { calculateWeaponStats } from '../engine/weapon'
 import type { ModSlot } from '../engine/types'
 import { encodeBuildCode } from '../lib/buildCode'
-import { companionRank, toCompanionBuildItems } from '../lib/companionBuild'
+import { canChooseWeapon, companionRank, getCompanionWeapon, getRoboticWeapons, toCompanionBuildItems } from '../lib/companionBuild'
+import { modularCompanions, partLabels, partOptions, type PartOption } from '../data/companionData'
 import { filterModsForCompanion } from '../lib/modCompatibility'
 import { searchItems } from '../lib/search'
 import { useCompanionStore } from '../store/useCompanionStore'
-import { companionWeaponType, type CatalogData, type CompanionRecord } from '../types'
+import type { CatalogData, CompanionRecord } from '../types'
 import { EmptyState, ItemImage, ModRow, Stat, formatNumber, formatPercent, matchesSlotPolarity, polarityOptions } from '../ui/common'
 
-const kindNames = { Sentinel: 'Sentinela', Beast: 'Besta' } as const
+const kindNames = { Sentinel: 'Sentinela', Beast: 'Besta', MOA: 'MOA', Hound: 'Hound' } as const
+
+function describePart(option: PartOption): string {
+  const changes = (['health', 'shield', 'armor'] as const)
+    .filter((key) => option[key] !== undefined && option[key] !== 0)
+    .map((key) => {
+      const value = option[key] ?? 0
+      const label = { health: 'Vida', shield: 'Escudo', armor: 'Armadura' }[key]
+      return Math.abs(value) >= 1 ? `${label} ${value}` : `${label} ${value > 0 ? '+' : ''}${Math.round(value * 100)}%`
+    })
+  if (option.polarity) changes.push(option.polarity)
+  if ('weapon' in option) changes.push(String(option.weapon))
+  return changes.length ? `${option.name} (${changes.join(', ')})` : option.name
+}
 
 interface CompanionViewProps {
   catalog: CatalogData
@@ -34,10 +48,10 @@ function CompanionRow({ companion, active, onSelect }: { companion: CompanionRec
 }
 
 export function CompanionView({ catalog, catalogLoading, onSave }: CompanionViewProps) {
-  const companions = catalog.companions ?? []
+  const companions = useMemo(() => [...(catalog.companions ?? []), ...modularCompanions], [catalog.companions])
   const {
-    query, companionId, reactor, slots, weaponId,
-    setQuery, setWeapon, selectCompanion, equipMod, removeMod, setModRank, setSlotPolarity, setReactor,
+    query, companionId, reactor, slots, weaponId, parts,
+    setQuery, setWeapon, setPart, selectCompanion, equipMod, removeMod, setModRank, setSlotPolarity, setReactor,
   } = useCompanionStore()
   const [pickerSlot, setPickerSlot] = useState<number | null>(null)
   const [modQuery, setModQuery] = useState('')
@@ -58,17 +72,14 @@ export function CompanionView({ catalog, catalogLoading, onSave }: CompanionView
   })), [slots, modsById])
 
   const stats = useMemo(() => companion
-    ? calculateCompanionStats(companion, modSlots.flatMap((slot) => slot.mod ? [{ upgrade: slot.mod, rank: slot.rank ?? 0 }] : []))
-    : null, [companion, modSlots])
+    ? calculateCompanionStats(companion, modSlots.flatMap((slot) => slot.mod ? [{ upgrade: slot.mod, rank: slot.rank ?? 0 }] : []), parts)
+    : null, [companion, modSlots, parts])
   const capacity = calculateCapacity({ rank: companionRank, catalyst: reactor, slots: modSlots })
   const buildCode = companion
-    ? encodeBuildCode({ v: 1, itens: toCompanionBuildItems({ companionId: companion.uniqueName, reactor, slots, weaponId }) })
+    ? encodeBuildCode({ v: 1, itens: toCompanionBuildItems({ companionId: companion.uniqueName, reactor, slots, weaponId, parts }) })
     : ''
-  const companionWeapons = useMemo(
-    () => catalog.weapons.filter((weapon) => weapon.type === companionWeaponType && !weapon.uniqueName.includes('/Friendly/Pets/')).sort((a, b) => a.name.localeCompare(b.name)),
-    [catalog.weapons],
-  )
-  const weapon = companion?.kind === 'Sentinel' ? companionWeapons.find((entry) => entry.uniqueName === weaponId) : undefined
+  const roboticWeapons = useMemo(() => getRoboticWeapons(catalog.weapons), [catalog.weapons])
+  const weapon = companion ? getCompanionWeapon(companion, { weaponId, parts }, catalog.weapons) : undefined
   const weaponStats = useMemo(() => weapon ? calculateWeaponStats({ weapon }) : null, [weapon])
   const pickerMods = useMemo(
     () => companion && pickerSlot !== null ? searchItems(filterModsForCompanion(catalog.mods, companion.kind), modQuery) : [],
@@ -147,7 +158,7 @@ export function CompanionView({ catalog, catalogLoading, onSave }: CompanionView
         <div>
           <div className="eyebrow"><span>03</span> / COMPANHEIROS</div>
           <h1>Editor de companheiro</h1>
-          <p>Sentinelas e bestas no ranque 30. As sentinelas incluem a respectiva arma.</p>
+          <p>Sentinelas, bestas, MOA e Hound no ranque 30, cada um com a sua arma.</p>
         </div>
         <div className="catalog-counts"><span><b>{companions.length}</b> companheiros</span></div>
       </section>
@@ -215,28 +226,45 @@ export function CompanionView({ catalog, catalogLoading, onSave }: CompanionView
               <div className="section-rule build-section-heading"><span>MODS DA BUILD</span><span>{modSlots.filter((slot) => slot.mod).length} / {modSlots.length}</span></div>
               <div className="build-slot-grid">{modSlots.map(renderSlot)}</div>
 
-              {companion.kind === 'Sentinel' && (
+              {(companion.kind === 'MOA' || companion.kind === 'Hound') && (
                 <>
-                  <div className="section-rule lower-rule"><span>ARMA DA SENTINELA</span><span>CALCULADA COMO ARMA</span></div>
-                  <div className="arcane-slot">
-                    <select value={weaponId ?? ''} onChange={(event) => setWeapon(event.target.value || null)} aria-label="Arma da sentinela">
-                      <option value="">Sem arma</option>
-                      {companionWeapons.map((entry) => <option key={entry.uniqueName} value={entry.uniqueName}>{entry.name}</option>)}
-                    </select>
-                    {weapon && weaponStats && (
-                      <div className="side-stats-grid">
-                        <Stat icon={Zap} label="DPS de referência" value={formatNumber(weaponStats.referenceDps, 0)} />
-                        <Stat icon={Zap} label="Dano total" value={formatNumber(weaponStats.totalDamage)} />
-                        <Stat icon={Crosshair} label="Chance crítica" value={formatPercent(weaponStats.criticalChance)} />
-                        <Stat icon={Activity} label="Multiplicador crítico" value={`${formatNumber(weaponStats.criticalMultiplier)}×`} />
-                        <Stat icon={Activity} label="Chance de estado" value={formatPercent(weaponStats.statusChance)} />
-                        <Stat icon={Layers3} label="Multishot" value={`${formatNumber(weaponStats.multishot)}×`} />
-                        <Stat icon={Swords} label="Cadência" value={`${formatNumber(weaponStats.fireRate)} /s`} />
-                      </div>
-                    )}
+                  <div className="section-rule lower-rule"><span>PEÇAS</span><span>GILDED · RANQUE 30</span></div>
+                  <div className="arcane-grid">
+                    {Object.entries(partOptions[companion.kind]).map(([slot, options]) => (
+                      <label className="arcane-slot" key={slot}>
+                        <span className="arcane-label">{partLabels[slot].toLocaleUpperCase('pt-PT')}</span>
+                        <select value={parts[slot] ?? ''} onChange={(event) => setPart(companion, slot, event.target.value)} aria-label={partLabels[slot]}>
+                          {options.map((option) => <option key={option.name} value={option.name}>{describePart(option)}</option>)}
+                        </select>
+                      </label>
+                    ))}
                   </div>
                 </>
               )}
+
+              <div className="section-rule lower-rule"><span>ARMA</span><span>{canChooseWeapon(companion) ? 'ARMA ROBÓTICA' : companion.kind === 'Hound' ? 'DEFINIDA PELO MODELO' : 'GARRAS'}</span></div>
+              <div className="arcane-slot">
+                {canChooseWeapon(companion) ? (
+                  <select value={weaponId ?? ''} onChange={(event) => setWeapon(event.target.value || null)} aria-label="Arma do companheiro">
+                    <option value="">Sem arma</option>
+                    {roboticWeapons.map((entry) => <option key={entry.uniqueName} value={entry.uniqueName}>{entry.name}</option>)}
+                  </select>
+                ) : (
+                  <strong className="slot-mod-name">{weapon?.name ?? 'Sem dados de arma'}</strong>
+                )}
+                {weapon && weaponStats && (
+                  <div className="side-stats-grid">
+                    <Stat icon={Zap} label="DPS de referência" value={weapon.fireRate ? formatNumber(weaponStats.referenceDps, 0) : '—'} />
+                    <Stat icon={Zap} label="Dano total" value={formatNumber(weaponStats.totalDamage)} />
+                    <Stat icon={Crosshair} label="Chance crítica" value={formatPercent(weaponStats.criticalChance)} />
+                    <Stat icon={Activity} label="Multiplicador crítico" value={`${formatNumber(weaponStats.criticalMultiplier)}×`} />
+                    <Stat icon={Activity} label="Chance de estado" value={formatPercent(weaponStats.statusChance)} />
+                    <Stat icon={Layers3} label="Multishot" value={`${formatNumber(weaponStats.multishot)}×`} />
+                    <Stat icon={Swords} label="Cadência" value={weapon.fireRate ? `${formatNumber(weaponStats.fireRate)} /s` : '—'} />
+                  </div>
+                )}
+                {weapon && !weapon.fireRate && <p className="arcane-effect">A wiki não indica a velocidade de ataque destas garras, por isso não há DPS de referência.</p>}
+              </div>
 
               <div className="build-code-section">
                 <div className="section-rule"><span>GUARDAR BUILD</span><span>BIBLIOTECA</span></div>

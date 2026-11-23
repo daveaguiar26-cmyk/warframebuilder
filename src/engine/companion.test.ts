@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { CompanionRecord } from '../types'
 import { calculateCompanionStats } from './companion'
+import { modularCompanions } from '../data/companionData'
 
 const carrier: CompanionRecord = {
   uniqueName: '/Lotus/Types/Sentinels/SentinelPowersuits/CarrierPowerSuit',
@@ -35,5 +36,22 @@ describe('companion calculations', () => {
     const stats = calculateCompanionStats(carrier, [upgrade('Primed Regen', 'Sentinel recovery time reduced by 35s.')])
     expect(stats.health).toBe(560)
     expect(stats.ignoredEffects).toHaveLength(1)
+  })
+})
+
+describe('modular companion stats (gilded, rank 30)', () => {
+  const [moa, hound] = modularCompanions
+
+  it('applies MOA core and gyro modifiers; total stays 1190', () => {
+    const stats = calculateCompanionStats(moa, [], { modelo: 'Para', nucleo: 'Lehan', giroscopio: 'Atheca', suporte: 'Drimper' })
+    expect(stats.health).toBeCloseTo(472.5)
+    expect(stats.health + stats.shield + stats.armor).toBeCloseTo(1190)
+  })
+
+  it('matches the wiki gilded table for Hound Adlet + Cela (420 / 585 / 315)', () => {
+    const stats = calculateCompanionStats(hound, [], { modelo: 'Hec', nucleo: 'Adlet', suporte: 'Cela', estabilizador: 'Frak' })
+    expect(stats.health).toBeCloseTo(420)
+    expect(stats.shield).toBeCloseTo(585)
+    expect(stats.armor).toBeCloseTo(315)
   })
 })
