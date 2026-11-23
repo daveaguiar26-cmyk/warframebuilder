@@ -63,6 +63,7 @@ export function CompanionView({ catalog, catalogLoading, onSave }: CompanionView
     setQuery, setWeapon, setPart, selectCompanion, equipMod, removeMod, setModRank, setSlotPolarity, setReactor, setWeaponCatalyst,
   } = useCompanionStore()
   const [picker, setPicker] = useState<{ target: SlotTarget; index: number } | null>(null)
+  const [tab, setTab] = useState<'companheiro' | 'arma'>('companheiro')
   const [modQuery, setModQuery] = useState('')
   const [saveName, setSaveName] = useState('')
   const [saving, setSaving] = useState(false)
@@ -252,9 +253,12 @@ export function CompanionView({ catalog, catalogLoading, onSave }: CompanionView
                 </div>
               </div>
 
-              <div className="section-rule build-section-heading"><span>MODS DA BUILD</span><span>{modSlots.filter((slot) => slot.mod).length} / {modSlots.length}</span></div>
-              <div className="build-slot-grid">{modSlots.map((slot) => renderSlot(slot, 'companion'))}</div>
-
+              <div className="weapon-filters companion-tabs" role="tablist" aria-label="Secções do companheiro">
+                <button type="button" role="tab" aria-selected={tab === 'companheiro'} className={tab === 'companheiro' ? 'filter-chip is-active' : 'filter-chip'} onClick={() => setTab('companheiro')}>Companheiro</button>
+                <button type="button" role="tab" aria-selected={tab === 'arma'} className={tab === 'arma' ? 'filter-chip is-active' : 'filter-chip'} onClick={() => setTab('arma')}>Arma{weapon ? ` · ${weapon.name}` : ''}</button>
+              </div>
+              {tab === 'companheiro' ? (
+                <>
               {(companion.kind === 'MOA' || companion.kind === 'Hound') && (
                 <>
                   <div className="section-rule lower-rule"><span>PEÇAS</span><span>GILDED · RANQUE 30</span></div>
@@ -271,6 +275,12 @@ export function CompanionView({ catalog, catalogLoading, onSave }: CompanionView
                 </>
               )}
 
+              <div className="section-rule build-section-heading"><span>MODS DA BUILD</span><span>{modSlots.filter((slot) => slot.mod).length} / {modSlots.length}</span></div>
+              <div className="build-slot-grid">{modSlots.map((slot) => renderSlot(slot, 'companion'))}</div>
+
+                </>
+              ) : (
+                <>
               <div className="section-rule lower-rule"><span>ARMA</span><span>{canChooseWeapon(companion) ? 'ARMA ROBÓTICA' : companion.kind === 'Hound' ? 'DEFINIDA PELO MODELO' : 'GARRAS'}</span></div>
               <div className="arcane-slot">
                 {canChooseWeapon(companion) ? (
@@ -310,6 +320,9 @@ export function CompanionView({ catalog, catalogLoading, onSave }: CompanionView
                   {weaponStats?.ignoredEffects.length ? (
                     <p className="raw-data-note">Efeitos da arma fora do cálculo: {weaponStats.ignoredEffects.join(' · ')}</p>
                   ) : null}
+                </>
+              )}
+
                 </>
               )}
 
