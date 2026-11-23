@@ -6,11 +6,13 @@ describe('build editor store', () => {
     useCatalogStore.getState().selectWeapon(null)
   })
 
-  it('creates eight slots and applies factory polarities in catalog order', () => {
-    useCatalogStore.getState().selectWeapon('/test/weapon', ['madurai', 'vazarin'])
+  it('creates eight normal slots plus exilus and stance, with factory polarities', () => {
+    useCatalogStore.getState().selectWeapon('/test/weapon', ['madurai', 'vazarin'], 'zenurik')
     const slots = useCatalogStore.getState().buildSlots
 
-    expect(slots).toHaveLength(8)
+    expect(slots).toHaveLength(10)
+    expect(slots[9].factoryPolarity).toBe('zenurik')
+    expect(slots[8].factoryPolarity).toBe('none')
     expect(slots[0].polarity).toBe('madurai')
     expect(slots[1].factoryPolarity).toBe('vazarin')
     expect(slots[2].polarity).toBe('none')

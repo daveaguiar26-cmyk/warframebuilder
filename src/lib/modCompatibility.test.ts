@@ -115,3 +115,25 @@ describe('filterModsForCompanionWeapon', () => {
     expect(filterModsForCompanionWeapon(all, laser, undefined)).toEqual([])
   })
 })
+
+describe('weapon exilus and stance slots', () => {
+  const melee = { uniqueName: '/ichor', name: 'Dual Ichor', category: 'Melee' as const, type: 'Melee' }
+  const base = { baseDrain: 4, polarity: 'naramon', fusionLimit: 5 }
+  const merit = { ...base, uniqueName: '/Lotus/Upgrades/EmpoweredHeavyMelee/CertainStrike', name: "Discipline's Merit", type: 'Melee Mod', compatName: 'Melee', isUtility: true }
+  const pressure = { ...base, uniqueName: '/Lotus/Upgrades/Mods/Melee/WeaponMeleeDamageMod', name: 'Pressure Point', type: 'Melee Mod' }
+  const tiger = { ...base, uniqueName: '/Lotus/Weapons/Tenno/Melee/MeleeTrees/DualSwordCmbOneMeleeTree', name: 'Swirling Tiger', type: 'Stance Mod', compatName: 'Dual Swords' }
+  const all = [merit, pressure, tiger]
+
+  it('keeps stances out of normal slots', () => {
+    expect(filterModsForWeapon(all, melee).map((mod) => mod.name)).toEqual(["Discipline's Merit", 'Pressure Point'])
+  })
+
+  it('accepts only utility mods in the exilus slot', () => {
+    expect(filterModsForWeapon(all, melee, 'exilus').map((mod) => mod.name)).toEqual(["Discipline's Merit"])
+  })
+
+  it('accepts stances only on melee weapons', () => {
+    expect(filterModsForWeapon(all, melee, 'stance').map((mod) => mod.name)).toEqual(['Swirling Tiger'])
+    expect(filterModsForWeapon(all, rifle, 'stance')).toEqual([])
+  })
+})

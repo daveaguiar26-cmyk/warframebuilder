@@ -28,7 +28,14 @@ import { decodeBuildCode, encodeBuildCode, type BuildCodeV1 } from './lib/buildC
 import { loadLibrary, saveBuildToSheet, type LibraryEntry } from './lib/library'
 import { filterModsForWeapon } from './lib/modCompatibility'
 import { searchItems } from './lib/search'
-import { useCatalogStore, type WeaponFilter } from './store/useCatalogStore'
+import {
+  createBuildSlots,
+  useCatalogStore,
+  weaponExilusSlotIndex,
+  weaponNormalSlotCount,
+  weaponStanceSlotIndex,
+  type WeaponFilter,
+} from './store/useCatalogStore'
 import { useWarframeStore } from './store/useWarframeStore'
 import { auraSlotIndex, createWarframeSlots, createArcaneSlots, exilusSlotIndex, restoreWarframeBuild } from './lib/warframeBuild'
 import { isAuraMod } from './lib/modCompatibility'
@@ -163,14 +170,15 @@ export default function App() {
     if (item.kind === 'arma') {
       const weapon = catalog.weapons.find((entry) => entry.uniqueName === item.id)
       if (!weapon) return
-      const slots: BuildModSlot[] = Array.from({ length: 8 }, (_, index) => {
-        const factoryPolarity = weapon.polarities?.[index] ?? 'none'
-        return { modId: null, rank: 0, polarity: factoryPolarity, factoryPolarity }
-      })
-      // O editor de armas ainda não tem slots de Stance nem de Exilus. No jogo, a linha de cima
-      // (lida primeiro) tem a Stance e o Exilus: com mais de 8 mods, o primeiro é o Exilus.
+      const slots = createBuildSlots(weapon.polarities, weapon.stancePolarity)
+      const stance = weapon.category === 'Melee' ? mods.find(({ mod }) => mod.type === 'Stance Mod') : undefined
+      if (stance) fill(slots, weaponStanceSlotIndex, stance.mod, stance.rank)
+      // No jogo, a linha de cima (lida primeiro) tem o Exilus: com mais de 8 mods, o primeiro
+      // mod de utilidade vai para o Exilus.
       const normal = mods.filter(({ mod }) => mod.type !== 'Stance Mod')
-      normal.slice(normal.length > 8 ? 1 : 0).slice(0, 8).forEach(({ mod, rank }, index) => fill(slots, index, mod, rank))
+      const exilus = normal.length > 8 ? normal.find(({ mod }) => mod.isUtility) : undefined
+      if (exilus) fill(slots, weaponExilusSlotIndex, exilus.mod, exilus.rank)
+      normal.filter((entry) => entry !== exilus).slice(0, 8).forEach(({ mod, rank }, index) => fill(slots, index, mod, rank))
       restoreBuild(weapon.uniqueName, 30, false, slots)
       selectMod(null)
       setView('armas')
@@ -270,9 +278,10 @@ export default function App() {
 
   const selectedWeapon = catalog.weapons.find((weapon) => weapon.uniqueName === selectedWeaponId)
   const selectedMod = catalog.mods.find((mod) => mod.uniqueName === selectedModId)
+  const pickerSlotKind = modPickerSlot === weaponExilusSlotIndex ? 'exilus' : modPickerSlot === weaponStanceSlotIndex ? 'stance' : 'normal'
   const compatibleMods = useMemo(
-    () => selectedWeapon ? filterModsForWeapon(catalog.mods, selectedWeapon) : catalog.mods,
-    [catalog.mods, selectedWeapon],
+    () => selectedWeapon ? filterModsForWeapon(catalog.mods, selectedWeapon, pickerSlotKind) : catalog.mods,
+    [catalog.mods, selectedWeapon, pickerSlotKind],
   )
   const mods = useMemo(() => searchItems(compatibleMods, modQuery), [compatibleMods, modQuery])
   const modsById = useMemo(() => new Map(catalog.mods.map((mod) => [mod.uniqueName, mod])), [catalog.mods])
@@ -280,11 +289,12 @@ export default function App() {
     index,
     polarity: slot.polarity,
     factoryPolarity: slot.factoryPolarity,
-    kind: 'normal',
+    kind: index === weaponExilusSlotIndex ? 'exilus' : index === weaponStanceSlotIndex ? 'stance' : 'normal',
     mod: slot.modId ? modsById.get(slot.modId) : undefined,
     rank: slot.rank,
   })), [buildSlots, modsById])
-  const equippedMods = useMemo<RankedWeaponMod[]>(() => buildModSlots.flatMap((slot) =>
+  // A Stance não altera estatísticas da arma: fica fora do cálculo.
+  const equippedMods = useMemo<RankedWeaponMod[]>(() => buildModSlots.filter((slot) => slot.kind !== 'stance').flatMap((slot) =>
     slot.mod ? [{ slotIndex: slot.index, mod: slot.mod, rank: slot.rank ?? 0 }] : [],
   ), [buildModSlots])
   const weaponStats = useMemo(
@@ -341,7 +351,8 @@ export default function App() {
     const weaponItem = decoded.itens.find((item) => item.tipo === 'arma')
     if (!weaponItem) throw new Error('O código não contém uma arma, um Warframe nem um companheiro.')
     if (weaponItem.rank > 30) throw new Error('O ranque da arma tem de estar entre 0 e 30.')
-    if (weaponItem.slots.length !== 8) throw new Error('A build tem de conter exactamente oito slots.')
+    // Códigos antigos têm só os 8 slots normais; os novos acrescentam Exilus e Stance.
+    if (weaponItem.slots.length !== 8 && weaponItem.slots.length !== 10) throw new Error('A build tem de conter 8 ou 10 slots.')
 
     const weapon = catalog.weapons.find((item) => item.uniqueName === weaponItem.id)
     if (!weapon) throw new Error('A arma do código não existe no catálogo local.')
@@ -349,10 +360,14 @@ export default function App() {
     const usedModIds = weaponItem.slots.flatMap((slot) => slot.modId ? [slot.modId] : [])
     if (new Set(usedModIds).size !== usedModIds.length) throw new Error('A build contém o mesmo mod mais do que uma vez.')
 
-    const restoredSlots = weaponItem.slots.map((slot, index) => {
+    const factorySlots = createBuildSlots(weapon.polarities, weapon.stancePolarity)
+    const restoredSlots = factorySlots.map((factory, index) => {
+      const slot = weaponItem.slots[index] ?? { polarity: factory.polarity, modId: null, rank: 0 }
       const mod = slot.modId ? modsById.get(slot.modId) : undefined
       if (slot.modId && !mod) throw new Error(`O mod do slot ${index + 1} não existe no catálogo local.`)
       if (mod && slot.rank > mod.fusionLimit) throw new Error(`O rank do mod ${mod.name} excede o máximo.`)
+      const slotKind = index === weaponExilusSlotIndex ? 'exilus' : index === weaponStanceSlotIndex ? 'stance' : 'normal'
+      if (mod && filterModsForWeapon([mod], weapon, slotKind).length === 0) throw new Error(`O mod ${mod.name} não pode ser usado neste slot.`)
       if (!polarityOptions.some(([polarity]) => polarity === slot.polarity)) {
         throw new Error(`A polaridade do slot ${index + 1} não é reconhecida.`)
       }
@@ -361,7 +376,7 @@ export default function App() {
         modId: slot.modId,
         rank: slot.rank,
         polarity: slot.polarity,
-        factoryPolarity: weapon.polarities?.[index] ?? 'none',
+        factoryPolarity: factory.factoryPolarity,
       }
     })
 
@@ -432,6 +447,81 @@ export default function App() {
     )
   }
 
+  function renderWeaponSlot(slot: ModSlot) {
+    const index = slot.index
+    const mod = slot.mod
+    const polarityMatch = mod && slot.polarity !== 'none'
+      ? matchesSlotPolarity(slot.polarity ?? 'none', mod.polarity)
+      : null
+    const slotCost = mod ? getSlotDrain(slot) : 0
+    const rankedDrain = mod ? getRankedDrain(mod, slot.rank ?? 0) : 0
+
+    return (
+      <div className={`build-slot ${mod ? 'has-mod' : 'is-empty'} ${polarityMatch === null ? '' : polarityMatch ? 'is-matching' : 'is-mismatched'}`} key={index}>
+        <div className="build-slot-head">
+          <span>{slot.kind === 'exilus' ? 'EXILUS' : slot.kind === 'stance' ? 'STANCE' : `SLOT ${String(index + 1).padStart(2, '0')}`}</span>
+          {mod && (
+            <button
+              className="slot-remove-button"
+              type="button"
+              onClick={() => removeModFromSlot(index)}
+              title={`Remover ${mod.name}`}
+              aria-label={`Remover ${mod.name} do slot ${index + 1}`}
+            >
+              <Trash2 size={12} />
+            </button>
+          )}
+        </div>
+        {mod ? (
+          <>
+            <ItemImage name={mod.name} imageName={mod.imageName} className="slot-image" />
+            <strong className="slot-mod-name" title={mod.name}>{mod.name}</strong>
+            <div className="slot-controls">
+              <select
+                value={slot.rank ?? 0}
+                onChange={(event) => setModRank(index, Number(event.target.value))}
+                aria-label={`Ranque de ${mod.name} no slot ${index + 1}`}
+              >
+                {Array.from({ length: mod.fusionLimit + 1 }, (_, rank) => (
+                  <option key={rank} value={rank}>R{rank}</option>
+                ))}
+              </select>
+              <select
+                value={slot.polarity ?? 'none'}
+                onChange={(event) => setSlotPolarity(index, event.target.value)}
+                aria-label={`Polaridade do slot ${index + 1}`}
+              >
+                {polarityOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </div>
+            <span className={`slot-drain ${polarityMatch === null ? '' : polarityMatch ? 'is-matching' : 'is-mismatched'}`}>
+              {rankedDrain !== slotCost ? <small>{rankedDrain} → </small> : null}{slotCost}
+            </span>
+          </>
+        ) : (
+          <>
+            <button
+              className="empty-slot-add"
+              type="button"
+              disabled={!selectedWeapon}
+              onClick={() => setModPickerSlot(index)}
+              aria-label={`Adicionar mod ao slot ${index + 1}`}
+            >
+              <Plus size={16} />
+              <span>Adicionar mod</span>
+            </button>
+            <select
+              value={slot.polarity ?? 'none'}
+              onChange={(event) => setSlotPolarity(index, event.target.value)}
+              aria-label={`Polaridade do slot ${index + 1}`}
+            >
+              {polarityOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </>
+        )}
+      </div>
+    )
+  }
   async function copyLibraryCode(entry: LibraryEntry): Promise<void> {
     try {
       await navigator.clipboard.writeText(entry.codigo)
@@ -568,7 +658,7 @@ export default function App() {
                 weapon={weapon}
                 active={weapon.uniqueName === selectedWeaponId}
                 onSelect={() => {
-                  selectWeapon(weapon.uniqueName, weapon.polarities)
+                  selectWeapon(weapon.uniqueName, weapon.polarities, weapon.stancePolarity)
                   selectMod(null)
                 }}
               />
@@ -596,82 +686,15 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="section-rule build-section-heading"><span>MODS DA BUILD</span><span>{equippedMods.length} / 8</span></div>
-              <div className="build-slot-grid" aria-label="Slots de mods da build">
-                {buildModSlots.map((slot, index) => {
-                  const mod = slot.mod
-                  const polarityMatch = mod && slot.polarity !== 'none'
-                    ? matchesSlotPolarity(slot.polarity ?? 'none', mod.polarity)
-                    : null
-                  const slotCost = mod ? getSlotDrain(slot) : 0
-                  const rankedDrain = mod ? getRankedDrain(mod, slot.rank ?? 0) : 0
+              <div className="section-rule build-section-heading"><span>{selectedWeapon.category === 'Melee' ? 'EXILUS · STANCE' : 'EXILUS'}</span><span>SLOTS ESPECIAIS</span></div>
+              <div className="build-slot-grid special-slot-grid">
+                {renderWeaponSlot(buildModSlots[weaponExilusSlotIndex])}
+                {selectedWeapon.category === 'Melee' && renderWeaponSlot(buildModSlots[weaponStanceSlotIndex])}
+              </div>
 
-                  return (
-                    <div className={`build-slot ${mod ? 'has-mod' : 'is-empty'} ${polarityMatch === null ? '' : polarityMatch ? 'is-matching' : 'is-mismatched'}`} key={index}>
-                      <div className="build-slot-head">
-                        <span>SLOT {String(index + 1).padStart(2, '0')}</span>
-                        {mod && (
-                          <button
-                            className="slot-remove-button"
-                            type="button"
-                            onClick={() => removeModFromSlot(index)}
-                            title={`Remover ${mod.name}`}
-                            aria-label={`Remover ${mod.name} do slot ${index + 1}`}
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        )}
-                      </div>
-                      {mod ? (
-                        <>
-                          <ItemImage name={mod.name} imageName={mod.imageName} className="slot-image" />
-                          <strong className="slot-mod-name" title={mod.name}>{mod.name}</strong>
-                          <div className="slot-controls">
-                            <select
-                              value={slot.rank ?? 0}
-                              onChange={(event) => setModRank(index, Number(event.target.value))}
-                              aria-label={`Ranque de ${mod.name} no slot ${index + 1}`}
-                            >
-                              {Array.from({ length: mod.fusionLimit + 1 }, (_, rank) => (
-                                <option key={rank} value={rank}>R{rank}</option>
-                              ))}
-                            </select>
-                            <select
-                              value={slot.polarity ?? 'none'}
-                              onChange={(event) => setSlotPolarity(index, event.target.value)}
-                              aria-label={`Polaridade do slot ${index + 1}`}
-                            >
-                              {polarityOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                            </select>
-                          </div>
-                          <span className={`slot-drain ${polarityMatch === null ? '' : polarityMatch ? 'is-matching' : 'is-mismatched'}`}>
-                            {rankedDrain !== slotCost ? <small>{rankedDrain} → </small> : null}{slotCost}
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            className="empty-slot-add"
-                            type="button"
-                            disabled={!selectedWeapon}
-                            onClick={() => setModPickerSlot(index)}
-                            aria-label={`Adicionar mod ao slot ${index + 1}`}
-                          >
-                            <Plus size={16} />
-                            <span>Adicionar mod</span>
-                          </button>
-                          <select
-                            value={slot.polarity ?? 'none'}
-                            onChange={(event) => setSlotPolarity(index, event.target.value)}
-                            aria-label={`Polaridade do slot ${index + 1}`}
-                          >
-                            {polarityOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                          </select>
-                        </>
-                      )}
-                    </div>
-                  )
-                })}
+              <div className="section-rule build-section-heading"><span>MODS DA BUILD</span><span>{buildModSlots.slice(0, weaponNormalSlotCount).filter((slot) => slot.mod).length} / 8</span></div>
+              <div className="build-slot-grid" aria-label="Slots de mods da build">
+                {buildModSlots.slice(0, weaponNormalSlotCount).map(renderWeaponSlot)}
               </div>
 
               <div className="section-rule lower-rule"><span>DANO POR TIPO</span><span>SEM INIMIGO</span></div>

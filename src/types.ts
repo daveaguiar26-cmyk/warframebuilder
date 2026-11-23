@@ -17,6 +17,8 @@ export interface WeaponRecord {
   magazineSize?: number
   reloadTime?: number
   polarities?: string[]
+  /** Polaridade de fábrica do slot de Stance (corpo a corpo). */
+  stancePolarity?: string
 }
 
 /** Armas de sentinela: geridas no separador Companheiros. */
@@ -33,6 +35,8 @@ export interface ModRecord {
   polarity: string
   fusionLimit: number
   isExilus?: boolean
+  /** Mod de utilidade: pode ir para o slot Exilus de uma arma. */
+  isUtility?: boolean
   levelStats?: Array<{ stats: string[] }>
 }
 

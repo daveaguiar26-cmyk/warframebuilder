@@ -137,9 +137,6 @@ export function ImageImportDialog({ catalog, onApply, onClose }: ImageImportDial
                 </div>
               ))}
             </div>
-            {item?.kind === 'arma' && mods.some(({ mod }) => mod.type === 'Stance Mod') && (
-              <p className="raw-data-note">O editor de armas ainda não tem slot de Stance nem de Exilus: a Stance e o Exilus (o primeiro mod da linha de cima) não são aplicados.</p>
-            )}
             {mods.length > maxMods && <p className="import-code-error">Há mais mods do que slots. Remova os que foram lidos por engano.</p>}
             <p className="raw-data-note">Os ranques assumem o máximo e as polaridades ficam as de fábrica: a imagem não permite lê-los com segurança.</p>
           </>

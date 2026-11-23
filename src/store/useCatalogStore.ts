@@ -10,11 +10,17 @@ export interface BuildModSlot {
   factoryPolarity: string
 }
 
-const modSlotCount = 8
+/** 8 slots normais + Exilus (índice 8) + Stance (índice 9, só corpo a corpo). */
+export const weaponNormalSlotCount = 8
+export const weaponExilusSlotIndex = 8
+export const weaponStanceSlotIndex = 9
+const modSlotCount = 10
 
-function createBuildSlots(polarities: string[] = []): BuildModSlot[] {
+export function createBuildSlots(polarities: string[] = [], stancePolarity?: string): BuildModSlot[] {
   return Array.from({ length: modSlotCount }, (_, index) => {
-    const factoryPolarity = polarities[index] ?? 'none'
+    const factoryPolarity = index === weaponStanceSlotIndex
+      ? stancePolarity ?? 'none'
+      : index < weaponNormalSlotCount ? polarities[index] ?? 'none' : 'none'
     return { modId: null, rank: 0, polarity: factoryPolarity, factoryPolarity }
   })
 }
@@ -31,7 +37,7 @@ interface CatalogState {
   setWeaponFilter: (filter: WeaponFilter) => void
   setWeaponQuery: (query: string) => void
   setModQuery: (query: string) => void
-  selectWeapon: (id: string | null, polarities?: string[]) => void
+  selectWeapon: (id: string | null, polarities?: string[], stancePolarity?: string) => void
   selectMod: (id: string | null) => void
   addModToBuild: (modId: string) => boolean
   equipModInSlot: (slotIndex: number, modId: string) => boolean
@@ -55,11 +61,11 @@ export const useCatalogStore = create<CatalogState>((set) => ({
   setWeaponFilter: (weaponFilter) => set({ weaponFilter }),
   setWeaponQuery: (weaponQuery) => set({ weaponQuery }),
   setModQuery: (modQuery) => set({ modQuery }),
-  selectWeapon: (selectedWeaponId, polarities = []) => set((state) => {
+  selectWeapon: (selectedWeaponId, polarities = [], stancePolarity) => set((state) => {
     if (state.selectedWeaponId === selectedWeaponId) return state
     return {
       selectedWeaponId,
-      buildSlots: createBuildSlots(polarities),
+      buildSlots: createBuildSlots(polarities, stancePolarity),
       itemRank: 30,
       catalyst: false,
     }
@@ -69,7 +75,7 @@ export const useCatalogStore = create<CatalogState>((set) => ({
     let added = false
     set((state) => {
       if (state.buildSlots.some((slot) => slot.modId === modId)) return state
-      const emptyIndex = state.buildSlots.findIndex((slot) => slot.modId === null)
+      const emptyIndex = state.buildSlots.findIndex((slot, index) => index < weaponNormalSlotCount && slot.modId === null)
       if (emptyIndex === -1) return state
 
       added = true

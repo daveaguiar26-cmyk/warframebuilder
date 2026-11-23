@@ -60,8 +60,25 @@ function matchesWeaponType(weapon: WeaponRecord, mod: ModRecord): boolean {
   return modScope !== undefined && targets.has(modScope)
 }
 
-export function filterModsForWeapon(mods: ModRecord[], weapon: WeaponRecord): ModRecord[] {
-  return mods.filter((mod) => !isInternalProgressionVariant(mod, mods) && matchesWeaponType(weapon, mod))
+export type WeaponSlotKind = 'normal' | 'exilus' | 'stance'
+
+/**
+ * Mods compatíveis com uma arma, por tipo de slot:
+ * - normal: mods da arma, sem Stances;
+ * - exilus: só mods de utilidade (`isUtility` nos dados do jogo);
+ * - stance: qualquer Stance, em armas corpo a corpo. Os dados não indicam a classe da arma
+ *   (ex.: "Dual Swords"), por isso não é possível filtrar mais.
+ */
+export function filterModsForWeapon(mods: ModRecord[], weapon: WeaponRecord, slot: WeaponSlotKind = 'normal'): ModRecord[] {
+  if (slot === 'stance') {
+    return weapon.category === 'Melee'
+      ? mods.filter((mod) => mod.type === 'Stance Mod' && !isInternalProgressionVariant(mod, mods))
+      : []
+  }
+  return mods.filter((mod) => mod.type !== 'Stance Mod'
+    && !isInternalProgressionVariant(mod, mods)
+    && matchesWeaponType(weapon, mod)
+    && (slot !== 'exilus' || mod.isUtility === true))
 }
 
 export type WarframeSlotKind = 'normal' | 'aura' | 'exilus'

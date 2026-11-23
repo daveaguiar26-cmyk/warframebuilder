@@ -32,6 +32,7 @@ const weapons = itemCatalog
     magazineSize: item.magazineSize,
     reloadTime: item.reloadTime,
     polarities: item.polarities,
+    stancePolarity: item.stancePolarity,
   }))
 
 const mods = itemCatalog
@@ -47,6 +48,7 @@ const mods = itemCatalog
     polarity: item.polarity,
     fusionLimit: item.fusionLimit,
     isExilus: item.isExilus,
+    isUtility: item.isUtility,
     levelStats: item.levelStats,
   }))
 
